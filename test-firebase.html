@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Firebase Connection</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 15px;
+        }
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-bottom: 15px;
+            transition: transform 0.2s;
+        }
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+        }
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .log {
+            background: #1e293b;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            max-height: 500px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 8px 12px;
+            border-radius: 5px;
+            border-left: 4px solid;
+        }
+        .log-entry.success {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border-left-color: #10b981;
+        }
+        .log-entry.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border-left-color: #ef4444;
+        }
+        .log-entry.info {
+            background: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+            border-left-color: #3b82f6;
+        }
+        .log-entry.warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+            border-left-color: #f59e0b;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+        .status.checking {
+            background: #fff3cd;
+            color: #856404;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔥 Test Firebase Connection</h1>
+        <p class="subtitle">Check if Firebase is working before uploading data</p>
+
+        <div class="status checking" id="status">⏳ Checking Firebase connection...</div>
+
+        <button class="btn" onclick="testWrite()" id="testWriteBtn">1️⃣ Test Write (Create 1 User)</button>
+        <button class="btn" onclick="testRead()" id="testReadBtn">2️⃣ Test Read (Read Users)</button>
+        <button class="btn" onclick="testBatchWrite()" id="testBatchBtn">3️⃣ Test Batch Write (Create 10 Users)</button>
+        <button class="btn" onclick="clearTestData()" id="clearBtn">🗑️ Clear Test Data</button>
+
+        <div class="log" id="log"></div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="public/js/firebase-config.js"></script>
+
+    <script>
+        const logDiv = document.getElementById('log');
+        const statusDiv = document.getElementById('status');
+
+        function log(msg, type = 'info') {
+            logDiv.style.display = 'block';
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong> ${msg}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateStatus(msg, status) {
+            statusDiv.textContent = msg;
+            statusDiv.className = 'status ' + status;
+        }
+
+        // Check Firebase connection on load
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                log('🔥 Testing Firebase connection...', 'info');
+                
+                // Try to read from Firestore
+                const testQuery = await db.collection('users').limit(1).get();
+                
+                updateStatus('✅ Firebase Connected!', 'connected');
+                log('✅ Firebase is working!', 'success');
+                log(`📊 Found ${testQuery.size} existing user(s)`, 'info');
+                
+            } catch (error) {
+                updateStatus('❌ Firebase Connection Failed', 'disconnected');
+                log('❌ Firebase Error: ' + error.message, 'error');
+                log('💡 Check your Firebase credentials in firebase-config.js', 'warning');
+            }
+        });
+
+        async function testWrite() {
+            const btn = document.getElementById('testWriteBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Testing...';
+
+            try {
+                log('📝 Creating test user...', 'info');
+                
+                await db.collection('users').doc('9999999999').set({
+                    phone: '9999999999',
+                    name: 'Test User',
+                    role: 'admin',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    isActive: true
+                });
+
+                log('✅ SUCCESS! User created with ID: 9999999999', 'success');
+                updateStatus('✅ Write Test Passed', 'connected');
+
+            } catch (error) {
+                log('❌ WRITE FAILED: ' + error.message, 'error');
+                log('📋 Error details: ' + error.code, 'error');
+                updateStatus('❌ Write Test Failed', 'disconnected');
+            }
+
+            btn.disabled = false;
+            btn.textContent = '1️⃣ Test Write (Create 1 User)';
+        }
+
+        async function testRead() {
+            const btn = document.getElementById('testReadBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Reading...';
+
+            try {
+                log('📖 Reading users from Firestore...', 'info');
+                
+                const snapshot = await db.collection('users').limit(10).get();
+                
+                log(`✅ SUCCESS! Found ${snapshot.size} user(s)`, 'success');
+                
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    log(`   📄 ${doc.id} - ${data.name} (${data.role})`, 'info');
+                });
+
+                if (snapshot.size === 0) {
+                    log('⚠️ No users found. Run Test Write first.', 'warning');
+                }
+
+                updateStatus('✅ Read Test Passed', 'connected');
+
+            } catch (error) {
+                log('❌ READ FAILED: ' + error.message, 'error');
+                updateStatus('❌ Read Test Failed', 'disconnected');
+            }
+
+            btn.disabled = false;
+            btn.textContent = '2️⃣ Test Read (Read Users)';
+        }
+
+        async function testBatchWrite() {
+            const btn = document.getElementById('testBatchBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Batch Writing...';
+
+            try {
+                log('🔥 Creating batch write with 10 users...', 'info');
+                
+                const batch = db.batch();
+                
+                for (let i = 0; i < 10; i++) {
+                    const phone = String(9000000000 + i);
+                    const docRef = db.collection('users').doc(phone);
+                    batch.set(docRef, {
+                        phone: phone,
+                        name: `Test Staff ${i + 1}`,
+                        role: 'staff',
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        isActive: true
+                    });
+                    log(`   📝 Queued: ${phone}`, 'info');
+                }
+
+                log('⏳ Committing batch...', 'warning');
+                await batch.commit();
+                
+                log('✅ SUCCESS! Batch write completed - 10 users created', 'success');
+                updateStatus('✅ Batch Write Test Passed', 'connected');
+
+            } catch (error) {
+                log('❌ BATCH WRITE FAILED: ' + error.message, 'error');
+                log('📋 Error code: ' + error.code, 'error');
+                
+                if (error.code === 'permission-denied') {
+                    log('⚠️ PERMISSION DENIED - Check Firestore rules!', 'error');
+                    log('💡 Go to Firebase Console → Firestore → Rules', 'warning');
+                }
+                
+                updateStatus('❌ Batch Write Test Failed', 'disconnected');
+            }
+
+            btn.disabled = false;
+            btn.textContent = '3️⃣ Test Batch Write (Create 10 Users)';
+        }
+
+        async function clearTestData() {
+            const btn = document.getElementById('clearBtn');
+            
+            if (!confirm('Delete all test users (9000000000-9000000009 and 9999999999)?')) {
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = '⏳ Deleting...';
+
+            try {
+                log('🗑️ Deleting test users...', 'warning');
+                
+                const batch = db.batch();
+                
+                // Delete test admin
+                batch.delete(db.collection('users').doc('9999999999'));
+                log('   🗑️ Queued delete: 9999999999', 'warning');
+                
+                // Delete test staff
+                for (let i = 0; i < 10; i++) {
+                    const phone = String(9000000000 + i);
+                    batch.delete(db.collection('users').doc(phone));
+                    log(`   🗑️ Queued delete: ${phone}`, 'warning');
+                }
+
+                await batch.commit();
+                
+                log('✅ Test data cleared!', 'success');
+
+            } catch (error) {
+                log('❌ DELETE FAILED: ' + error.message, 'error');
+            }
+
+            btn.disabled = false;
+            btn.textContent = '🗑️ Clear Test Data';
+        }
+    </script>
+</body>
+</html>

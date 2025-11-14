@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Direct Firebase Upload</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #1e293b;
+            color: #10b981;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #0f172a;
+            padding: 30px;
+            border-radius: 10px;
+            border: 2px solid #10b981;
+        }
+        h1 { color: #10b981; margin-bottom: 20px; }
+        button {
+            background: #10b981;
+            color: #0f172a;
+            border: none;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            border-radius: 5px;
+            margin: 10px 5px;
+        }
+        button:hover { background: #059669; }
+        button:disabled { background: #666; cursor: not-allowed; }
+        .log {
+            background: #000;
+            padding: 20px;
+            margin-top: 20px;
+            border-radius: 5px;
+            max-height: 500px;
+            overflow-y: auto;
+            font-size: 14px;
+        }
+        .success { color: #10b981; }
+        .error { color: #ef4444; }
+        .info { color: #3b82f6; }
+        .warning { color: #f59e0b; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Direct Firebase Upload</h1>
+        <p>This will upload your Excel data directly to Firestore</p>
+        
+        <input type="file" id="fileInput" accept=".xlsx" style="margin: 20px 0;">
+        <br>
+        <button onclick="uploadData()" id="uploadBtn" disabled>Upload to Firestore</button>
+        
+        <div class="log" id="log"></div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="public/js/firebase-config.js"></script>
+
+    <script>
+        let pssData = [];
+        let adminData = [];
+
+        function log(msg, type = 'info') {
+            const div = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            div.innerHTML += `<div class="${type}">[${time}] ${msg}</div>`;
+            div.scrollTop = div.scrollHeight;
+        }
+
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            log('Reading Excel file...', 'info');
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                
+                pssData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                adminData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[1]]);
+                
+                log(`✅ Found ${adminData.length} admins and ${pssData.length} PSS stations`, 'success');
+                document.getElementById('uploadBtn').disabled = false;
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        async function uploadData() {
+            const btn = document.getElementById('uploadBtn');
+            btn.disabled = true;
+            btn.textContent = 'Uploading...';
+            
+            try {
+                log('Starting upload...', 'info');
+                
+                // Upload admins one by one
+                log('Uploading admins...', 'info');
+                for (let i = 0; i < adminData.length; i++) {
+                    const admin = adminData[i];
+                    const phone = String(Math.floor(admin['phone number']));
+                    const name = admin['pss/admin name'];
+                    
+                    try {
+                        await db.collection('users').doc(phone).set({
+                            phone: phone,
+                            name: name,
+                            role: 'admin',
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            isActive: true
+                        });
+                        log(`✅ Admin: ${name} (${phone})`, 'success');
+                    } catch (err) {
+                        log(`❌ Failed: ${name} - ${err.message}`, 'error');
+                    }
+                }
+                
+                // Upload PSS stations
+                log('Uploading PSS stations...', 'info');
+                for (let i = 0; i < pssData.length; i++) {
+                    const pss = pssData[i];
+                    const name = pss['PSS NAME'];
+                    const feeders = Math.floor(pss['FEEDERS']);
+                    const linemen = (pss['LINEMAN'] || '').split(',').map(s => s.trim()).filter(s => s);
+                    const helpers = (pss['HELPER'] || '').split(',').map(s => s.trim()).filter(s => s);
+                    
+                    try {
+                        await db.collection('pss_stations').add({
+                            name: name,
+                            code: name.substring(0, 3).toUpperCase(),
+                            voltage: '33/11 kV',
+                            feeders: feeders,
+                            location: name,
+                            linemen: linemen,
+                            helpers: helpers,
+                            isActive: true,
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        log(`✅ PSS: ${name}`, 'success');
+                    } catch (err) {
+                        log(`❌ Failed: ${name} - ${err.message}`, 'error');
+                    }
+                }
+                
+                // Upload staff
+                log('Uploading staff...', 'info');
+                for (let i = 0; i < pssData.length; i++) {
+                    const pss = pssData[i];
+                    const pssName = pss['PSS NAME'];
+                    const linemen = (pss['LINEMAN'] || '').split(',').map(s => s.trim()).filter(s => s);
+                    const helpers = (pss['HELPER'] || '').split(',').map(s => s.trim()).filter(s => s);
+                    const allNames = [...linemen, ...helpers];
+                    
+                    for (let j = 0; j < allNames.length; j++) {
+                        const phone = String(9100000000 + (i * 100) + j);
+                        const personName = allNames[j];
+                        const staffType = linemen.includes(personName) ? 'lineman' : 'helper';
+                        
+                        try {
+                            await db.collection('users').doc(phone).set({
+                                phone: phone,
+                                name: personName,
+                                role: 'staff',
+                                staffType: staffType,
+                                pssStation: pssName,
+                                names: allNames,
+                                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                isActive: true
+                            });
+                            log(`✅ Staff: ${personName} (${phone})`, 'success');
+                        } catch (err) {
+                            log(`❌ Failed: ${personName} - ${err.message}`, 'error');
+                        }
+                    }
+                }
+                
+                log('', 'info');
+                log('🎉 UPLOAD COMPLETE!', 'success');
+                log(`Login with: ${Math.floor(adminData[0]['phone number'])}`, 'success');
+                
+                btn.textContent = '✅ Complete!';
+                btn.style.background = '#10b981';
+                
+            } catch (error) {
+                log('❌ Upload failed: ' + error.message, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Try Again';
+            }
+        }
+    </script>
+</body>
+</html>

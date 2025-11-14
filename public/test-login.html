@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug - PSS Login</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            max-width: 500px;
+            width: 100%;
+        }
+        h1 { margin-bottom: 30px; text-align: center; }
+        input {
+            width: 100%;
+            padding: 15px;
+            margin: 10px 0;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+        }
+        button {
+            width: 100%;
+            padding: 15px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 18px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        button:hover { background: #45a049; }
+        button:disabled { background: #666; cursor: not-allowed; }
+        #status {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            min-height: 100px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .success { color: #4CAF50; }
+        .error { color: #f44336; }
+        .info { color: #2196F3; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Debug Login Test</h1>
+        <input type="tel" id="phone" placeholder="Enter phone number" maxlength="10">
+        <button onclick="testLogin()">Test Login</button>
+        <div id="status">Ready to test...</div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="js/firebase-config.js"></script>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const color = type === 'success' ? 'success' : type === 'error' ? 'error' : 'info';
+            statusDiv.innerHTML += `<div class="${color}">[${timestamp}] ${message}</div>`;
+            statusDiv.scrollTop = statusDiv.scrollHeight;
+        }
+
+        // Check Firebase connection on load
+        window.addEventListener('load', () => {
+            log('Checking Firebase connection...', 'info');
+            if (typeof firebase !== 'undefined') {
+                log('✅ Firebase SDK loaded', 'success');
+                if (typeof db !== 'undefined') {
+                    log('✅ Firestore initialized', 'success');
+                    log(`Project: ${firebase.app().options.projectId}`, 'info');
+                } else {
+                    log('❌ Firestore not initialized', 'error');
+                }
+            } else {
+                log('❌ Firebase SDK not loaded', 'error');
+            }
+        });
+
+        async function testLogin() {
+            const phone = document.getElementById('phone').value.trim();
+            const button = event.target;
+            
+            if (!/^[0-9]{10}$/.test(phone)) {
+                log('❌ Invalid phone number format', 'error');
+                return;
+            }
+            
+            button.disabled = true;
+            button.textContent = 'Testing...';
+            log(`📞 Testing login with: ${phone}`, 'info');
+            
+            try {
+                log('Querying Firestore...', 'info');
+                const snapshot = await db.collection('users')
+                    .where('phoneNumber', '==', phone)
+                    .where('status', '==', 'active')
+                    .limit(1)
+                    .get();
+                
+                if (snapshot.empty) {
+                    log('❌ Phone number not found', 'error');
+                } else {
+                    const userData = snapshot.docs[0].data();
+                    log('✅ User found!', 'success');
+                    log(`Name: ${userData.name}`, 'info');
+                    log(`Role: ${userData.role}`, 'info');
+                    log(`PSS Station: ${userData.pssStation}`, 'info');
+                    
+                    if (userData.role === 'admin') {
+                        log('👨‍💼 This is an ADMIN user', 'success');
+                        log('→ Should go to Admin Dashboard', 'info');
+                    } else {
+                        log('👥 This is a STAFF user', 'success');
+                        log('→ Should show name selection', 'info');
+                        
+                        // Get PSS station data
+                        const pssId = userData.pssStation.toLowerCase().replace(' ', '-').replace('(', '').replace(')', '');
+                        log(`Fetching PSS data for: ${pssId}`, 'info');
+                        
+                        const pssDoc = await db.collection('pss_stations').doc(pssId).get();
+                        if (pssDoc.exists) {
+                            const pssData = pssDoc.data();
+                            const allStaff = [...(pssData.linemen || []), ...(pssData.helpers || [])];
+                            log(`✅ Found ${allStaff.length} staff members:`, 'success');
+                            allStaff.forEach(name => log(`  - ${name}`, 'info'));
+                        } else {
+                            log(`❌ PSS station '${pssId}' not found`, 'error');
+                        }
+                    }
+                }
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+                console.error(error);
+            } finally {
+                button.disabled = false;
+                button.textContent = 'Test Login';
+            }
+        }
+    </script>
+</body>
+</html>

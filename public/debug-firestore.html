@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Firestore Debug - Check Collections</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+            margin: 0;
+        }
+        h1 {
+            color: #00ff88;
+            border-bottom: 2px solid #00ff88;
+            padding-bottom: 10px;
+        }
+        .section {
+            background: #16213e;
+            border: 1px solid #00ff88;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .section h2 {
+            color: #00d9ff;
+            margin-top: 0;
+        }
+        button {
+            background: #00ff88;
+            color: #000;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #00d9ff;
+        }
+        pre {
+            background: #0f0f0f;
+            border: 1px solid #333;
+            padding: 15px;
+            border-radius: 6px;
+            overflow-x: auto;
+            color: #0f0;
+            font-size: 12px;
+        }
+        .error {
+            color: #ff4444;
+            background: #331111;
+            padding: 10px;
+            border-radius: 6px;
+            border-left: 4px solid #ff4444;
+        }
+        .success {
+            color: #00ff88;
+            background: #113311;
+            padding: 10px;
+            border-radius: 6px;
+            border-left: 4px solid #00ff88;
+        }
+        .warning {
+            color: #ffaa00;
+            background: #332211;
+            padding: 10px;
+            border-radius: 6px;
+            border-left: 4px solid #ffaa00;
+        }
+        .loading {
+            color: #00d9ff;
+            animation: blink 1s infinite;
+        }
+        @keyframes blink {
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Firestore Debug Tool</h1>
+    
+    <div class="section">
+        <h2>1. Check PSS Stations Collection</h2>
+        <button onclick="checkPSSStations()">Check pss_stations</button>
+        <div id="pssResult"></div>
+    </div>
+    
+    <div class="section">
+        <h2>2. Check Users Collection</h2>
+        <button onclick="checkUsers()">Check users</button>
+        <div id="usersResult"></div>
+    </div>
+    
+    <div class="section">
+        <h2>3. Check Daily Entries</h2>
+        <button onclick="checkDailyEntries()">Check daily_entries</button>
+        <button onclick="checkKundukelaEntries()">Check Kundukela Entries</button>
+        <div id="entriesResult"></div>
+    </div>
+    
+    <div class="section">
+        <h2>4. Check Current Session</h2>
+        <button onclick="checkSession()">Check localStorage</button>
+        <button onclick="clearSession()">Clear Session</button>
+        <div id="sessionResult"></div>
+    </div>
+    
+    <div class="section">
+        <h2>5. Test Feeder Logic</h2>
+        <button onclick="testFeederLogic()">Test Dynamic Feeders</button>
+        <div id="feederResult"></div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="js/firebase-config.js"></script>
+    
+    <script>
+        // Initialize Firestore
+        const db = firebase.firestore();
+        
+        // 1. Check PSS Stations
+        async function checkPSSStations() {
+            const result = document.getElementById('pssResult');
+            result.innerHTML = '<div class="loading">⏳ Loading pss_stations collection...</div>';
+            
+            try {
+                const snapshot = await db.collection('pss_stations').get();
+                
+                if (snapshot.empty) {
+                    result.innerHTML = '<div class="error">❌ No pss_stations documents found!</div>';
+                    return;
+                }
+                
+                let html = '<div class="success">✅ Found ' + snapshot.size + ' PSS stations</div>';
+                html += '<pre>';
+                
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    html += '\n=== ' + doc.id + ' ===\n';
+                    html += 'feeders: ' + JSON.stringify(data.feeders) + '\n';
+                    html += 'feeders type: ' + typeof data.feeders + '\n';
+                    if (typeof data.feeders === 'number') {
+                        html += '  → Will generate ' + data.feeders + ' feeders\n';
+                    } else if (Array.isArray(data.feeders)) {
+                        html += '  → Array length: ' + data.feeders.length + '\n';
+                    }
+                    html += 'linemen: ' + (data.linemen?.length || 0) + ' entries\n';
+                    html += 'helpers: ' + (data.helpers?.length || 0) + ' entries\n';
+                    html += 'Full data: ' + JSON.stringify(data, null, 2) + '\n';
+                });
+                
+                html += '</pre>';
+                result.innerHTML = html;
+                
+            } catch (error) {
+                result.innerHTML = '<div class="error">❌ Error: ' + error.message + '</div>';
+                console.error(error);
+            }
+        }
+        
+        // 2. Check Users
+        async function checkUsers() {
+            const result = document.getElementById('usersResult');
+            result.innerHTML = '<div class="loading">⏳ Loading users collection...</div>';
+            
+            try {
+                const snapshot = await db.collection('users').where('status', '==', 'active').get();
+                
+                if (snapshot.empty) {
+                    result.innerHTML = '<div class="error">❌ No active users found!</div>';
+                    return;
+                }
+                
+                let html = '<div class="success">✅ Found ' + snapshot.size + ' active users</div>';
+                html += '<pre>';
+                
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    html += '\n=== ' + doc.id + ' ===\n';
+                    html += 'phoneNumber: ' + data.phoneNumber + '\n';
+                    html += 'name: ' + data.name + '\n';
+                    html += 'pssStation: ' + data.pssStation + '\n';
+                    html += 'role: ' + data.role + '\n';
+                });
+                
+                html += '</pre>';
+                result.innerHTML = html;
+                
+            } catch (error) {
+                result.innerHTML = '<div class="error">❌ Error: ' + error.message + '</div>';
+                console.error(error);
+            }
+        }
+        
+        // 3. Check Daily Entries
+        async function checkDailyEntries() {
+            const result = document.getElementById('entriesResult');
+            result.innerHTML = '<div class="loading">⏳ Loading daily_entries (last 10)...</div>';
+            
+            try {
+                const snapshot = await db.collection('daily_entries')
+                    .orderBy('timestamp', 'desc')
+                    .limit(10)
+                    .get();
+                
+                if (snapshot.empty) {
+                    result.innerHTML = '<div class="error">❌ No daily_entries found!</div>';
+                    return;
+                }
+                
+                let html = '<div class="success">✅ Found ' + snapshot.size + ' entries (showing last 10)</div>';
+                html += '<pre>';
+                
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    html += '\n=== ' + doc.id + ' ===\n';
+                    html += 'phoneNumber: ' + data.phoneNumber + '\n';
+                    html += 'pssStation: ' + data.pssStation + '\n';
+                    html += 'date: ' + data.date + '\n';
+                    html += 'staffName: ' + data.staffName + '\n';
+                    
+                    // Check feeders structure
+                    if (data.feeders) {
+                        html += '\n🔌 FEEDERS:\n';
+                        html += 'feeders type: ' + typeof data.feeders + '\n';
+                        if (typeof data.feeders === 'object') {
+                            const feederKeys = Object.keys(data.feeders);
+                            html += 'feeder count: ' + feederKeys.length + '\n';
+                            html += 'feeder names: ' + feederKeys.join(', ') + '\n';
+                            
+                            // Show first feeder details
+                            if (feederKeys.length > 0) {
+                                const firstFeeder = data.feeders[feederKeys[0]];
+                                html += '\nFirst feeder (' + feederKeys[0] + '):\n';
+                                html += JSON.stringify(firstFeeder, null, 2) + '\n';
+                            }
+                        }
+                    } else {
+                        html += '\n⚠️ NO FEEDERS DATA!\n';
+                        // Check for flat feeder fields
+                        const flatFields = Object.keys(data).filter(k => k.startsWith('feeder'));
+                        if (flatFields.length > 0) {
+                            html += '❌ FOUND FLAT FEEDER FIELDS: ' + flatFields.slice(0, 5).join(', ') + '...\n';
+                            html += '   This is the OLD WRONG structure!\n';
+                        }
+                    }
+                });
+                
+                html += '</pre>';
+                result.innerHTML = html;
+                
+            } catch (error) {
+                result.innerHTML = '<div class="error">❌ Error: ' + error.message + '</div>';
+                console.error(error);
+            }
+        }
+        
+        // Check Kundukela specific entries
+        async function checkKundukelaEntries() {
+            const result = document.getElementById('entriesResult');
+            result.innerHTML = '<div class="loading">⏳ Loading Kundukela entries...</div>';
+            
+            try {
+                const snapshot = await db.collection('daily_entries')
+                    .where('pssStation', '==', 'Kundukela')
+                    .get();
+                
+                let html = '<div class="success">✅ Found ' + snapshot.size + ' Kundukela entries</div>';
+                html += '<pre>';
+                
+                const phoneNumbers = {};
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    const phone = data.phoneNumber;
+                    if (!phoneNumbers[phone]) {
+                        phoneNumbers[phone] = [];
+                    }
+                    phoneNumbers[phone].push(data.date);
+                });
+                
+                html += '\n📊 Kundukela entries by phone number:\n';
+                for (const [phone, dates] of Object.entries(phoneNumbers)) {
+                    html += '\nPhone: ' + phone + ' → ' + dates.length + ' submissions\n';
+                    html += '  Dates: ' + dates.join(', ') + '\n';
+                }
+                
+                html += '</pre>';
+                result.innerHTML = html;
+                
+            } catch (error) {
+                result.innerHTML = '<div class="error">❌ Error: ' + error.message + '</div>';
+                console.error(error);
+            }
+        }
+        
+        // 4. Check Session
+        function checkSession() {
+            const result = document.getElementById('sessionResult');
+            const session = localStorage.getItem('pssUser');
+            
+            if (!session) {
+                result.innerHTML = '<div class="warning">⚠️ No session found in localStorage</div>';
+                return;
+            }
+            
+            try {
+                const data = JSON.parse(session);
+                let html = '<div class="success">✅ Session found</div>';
+                html += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                result.innerHTML = html;
+            } catch (e) {
+                result.innerHTML = '<div class="error">❌ Corrupted session: ' + e.message + '</div>';
+            }
+        }
+        
+        function clearSession() {
+            localStorage.clear();
+            sessionStorage.clear();
+            document.getElementById('sessionResult').innerHTML = '<div class="success">✅ Session cleared!</div>';
+        }
+        
+        // 5. Test Feeder Logic
+        async function testFeederLogic() {
+            const result = document.getElementById('feederResult');
+            result.innerHTML = '<div class="loading">⏳ Testing feeder logic...</div>';
+            
+            try {
+                // Get PSS config
+                const configSnapshot = await db.collection('pss_stations').get();
+                const pssConfig = {};
+                configSnapshot.forEach(doc => {
+                    pssConfig[doc.id] = doc.data();
+                });
+                
+                let html = '<div class="success">✅ Testing dynamic feeder generation</div>';
+                html += '<pre>';
+                
+                for (const [pssName, config] of Object.entries(pssConfig)) {
+                    html += '\n=== ' + pssName + ' ===\n';
+                    html += 'feeders config: ' + JSON.stringify(config.feeders) + '\n';
+                    
+                    // Simulate the logic from form-handler.js
+                    let feedersArray = [];
+                    if (typeof config.feeders === 'number') {
+                        feedersArray = Array.from({length: config.feeders}, (_, i) => i + 1);
+                        html += '✅ Generated array: [' + feedersArray.join(', ') + ']\n';
+                        html += '✅ Will show: Feeder 1 through Feeder ' + config.feeders + '\n';
+                    } else if (Array.isArray(config.feeders)) {
+                        feedersArray = Array.from({length: config.feeders.length}, (_, i) => i + 1);
+                        html += '✅ Generated array from length: [' + feedersArray.join(', ') + ']\n';
+                    } else {
+                        html += '❌ Unknown feeders format!\n';
+                        feedersArray = [1, 2, 3, 4, 5, 6]; // fallback
+                        html += '⚠️ Using fallback: [1, 2, 3, 4, 5, 6]\n';
+                    }
+                    
+                    html += 'Final feeder count: ' + feedersArray.length + '\n';
+                }
+                
+                html += '</pre>';
+                result.innerHTML = html;
+                
+            } catch (error) {
+                result.innerHTML = '<div class="error">❌ Error: ' + error.message + '</div>';
+                console.error(error);
+            }
+        }
+    </script>
+</body>
+</html>

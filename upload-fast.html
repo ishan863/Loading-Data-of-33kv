@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fast Batch Upload to Firestore</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 1000px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 15px;
+        }
+        .section {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 25px;
+        }
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: white;
+        }
+        .upload-area:hover {
+            background: #f8f9fa;
+            border-color: #764ba2;
+        }
+        .upload-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        .upload-text {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+            transition: transform 0.2s;
+        }
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+        }
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .file-info {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+        }
+        .file-info.active {
+            display: block;
+        }
+        .preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .preview-card {
+            background: linear-gradient(135deg, #667eea15, #764ba215);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .preview-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #667eea;
+        }
+        .preview-label {
+            color: #666;
+            font-size: 13px;
+        }
+        .progress {
+            margin-top: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            height: 30px;
+            overflow: hidden;
+            display: none;
+        }
+        .progress.active {
+            display: block;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+        }
+        .log {
+            background: #1e293b;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            display: none;
+        }
+        .log.active {
+            display: block;
+        }
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 8px 12px;
+            border-radius: 5px;
+            border-left: 4px solid;
+        }
+        .log-entry.success {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border-left-color: #10b981;
+        }
+        .log-entry.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border-left-color: #ef4444;
+        }
+        .log-entry.info {
+            background: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+            border-left-color: #3b82f6;
+        }
+        .log-entry.warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+            border-left-color: #f59e0b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚡ Fast Batch Upload</h1>
+        <p class="subtitle">Upload your Excel data using Firestore batches (500 writes per batch)</p>
+
+        <div class="section">
+            <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                <div class="upload-icon">📊</div>
+                <div class="upload-text">Click to Upload Excel File</div>
+            </div>
+            <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleFile(event)">
+            
+            <div class="file-info" id="fileInfo">
+                <div class="preview-grid" id="previewGrid"></div>
+            </div>
+        </div>
+
+        <button class="btn" id="uploadBtn" onclick="batchUpload()" disabled>
+            🚀 Upload to Firestore
+        </button>
+
+        <div class="progress" id="progress">
+            <div class="progress-bar" id="progressBar">0%</div>
+        </div>
+
+        <div class="log" id="log"></div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="public/js/firebase-config.js"></script>
+
+    <script>
+        let adminData = [];
+        let pssData = [];
+
+        function log(msg, type = 'info') {
+            const logDiv = document.getElementById('log');
+            logDiv.classList.add('active');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.innerHTML = `<strong>${new Date().toLocaleTimeString()}</strong> ${msg}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateProgress(percent, text) {
+            const progressDiv = document.getElementById('progress');
+            const progressBar = document.getElementById('progressBar');
+            progressDiv.classList.add('active');
+            progressBar.style.width = percent + '%';
+            progressBar.textContent = text || (percent + '%');
+        }
+
+        function handleFile(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            log('📖 Reading Excel: ' + file.name, 'info');
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                
+                // YOUR FORMAT: Sheet 1 = PSS data, Sheet 2 = Admin data (reversed!)
+                pssData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                adminData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[1]]);
+                
+                log(`✅ Sheet 1 (${workbook.SheetNames[0]}): ${pssData.length} PSS stations`, 'success');
+                log(`✅ Sheet 2 (${workbook.SheetNames[1]}): ${adminData.length} admins`, 'success');
+                
+                const totalStaff = pssData.reduce((sum, pss) => {
+                    const linemen = (pss['LINEMAN'] || '').split(',').filter(n => n.trim()).length;
+                    const helpers = (pss['HELPER'] || '').split(',').filter(n => n.trim()).length;
+                    return sum + linemen + helpers;
+                }, 0);
+
+                document.getElementById('fileInfo').classList.add('active');
+                document.getElementById('previewGrid').innerHTML = `
+                    <div class="preview-card">
+                        <div class="preview-value">${adminData.length}</div>
+                        <div class="preview-label">Admins</div>
+                    </div>
+                    <div class="preview-card">
+                        <div class="preview-value">${pssData.length}</div>
+                        <div class="preview-label">PSS</div>
+                    </div>
+                    <div class="preview-card">
+                        <div class="preview-value">${totalStaff}</div>
+                        <div class="preview-label">Staff</div>
+                    </div>
+                `;
+                
+                document.getElementById('uploadBtn').disabled = false;
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        async function batchUpload() {
+            const uploadBtn = document.getElementById('uploadBtn');
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = '⏳ Uploading...';
+            document.getElementById('log').innerHTML = '';
+
+            try {
+                log('🔥 Starting BATCH upload...', 'info');
+                updateProgress(5, 'Preparing batches...');
+
+                let batch = db.batch();
+                let batchCount = 0;
+                let totalWrites = 0;
+
+                // 1. Upload Admins
+                log('👤 Creating admin users...', 'info');
+                for (let i = 0; i < adminData.length; i++) {
+                    const admin = adminData[i];
+                    const name = admin['pss/admin name'] || admin['PSS/Admin Name'] || `Admin${i+1}`;
+                    const phone = String(admin['phone number'] || admin['Phone Number'] || (9876543210 + i));
+                    
+                    const docRef = db.collection('users').doc(phone);
+                    batch.set(docRef, {
+                        phone: phone,
+                        name: name,
+                        role: 'admin',
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                        isActive: true
+                    });
+                    
+                    batchCount++;
+                    if (batchCount === 500) {
+                        await batch.commit();
+                        log(`✅ Batch committed (${totalWrites + 500} writes)`, 'success');
+                        batch = db.batch();
+                        batchCount = 0;
+                    }
+                    totalWrites++;
+                }
+                updateProgress(30, `${adminData.length} admins queued`);
+
+                // 2. Upload PSS Stations
+                log('🏢 Creating PSS stations...', 'info');
+                for (let i = 0; i < pssData.length; i++) {
+                    const pss = pssData[i];
+                    // YOUR EXACT COLUMNS: "PSS NAME", "FEEDERS", "LINEMAN", "HELPER"
+                    const name = pss['PSS NAME'] || `PSS${i+1}`;
+                    const feeders = parseInt(pss['FEEDERS'] || 6);
+                    const linemenStr = pss['LINEMAN'] || '';
+                    const helpersStr = pss['HELPER'] || '';
+                    
+                    const linemen = linemenStr.split(',').map(n => n.trim()).filter(n => n);
+                    const helpers = helpersStr.split(',').map(n => n.trim()).filter(n => n);
+                    
+                    const docRef = db.collection('pss_stations').doc();
+                    batch.set(docRef, {
+                        name: name,
+                        code: name.substring(0, 3).toUpperCase(),
+                        voltage: '33/11 kV',
+                        feeders: feeders,
+                        location: name,
+                        linemen: linemen,
+                        helpers: helpers,
+                        isActive: true,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    batchCount++;
+                    if (batchCount === 500) {
+                        await batch.commit();
+                        log(`✅ Batch committed (${totalWrites + 500} writes)`, 'success');
+                        batch = db.batch();
+                        batchCount = 0;
+                    }
+                    totalWrites++;
+                }
+                updateProgress(50, `${pssData.length} PSS queued`);
+
+                // 3. Upload Staff Users
+                log('👷 Creating staff users...', 'info');
+                let staffCount = 0;
+                for (let i = 0; i < pssData.length; i++) {
+                    const pss = pssData[i];
+                    // YOUR EXACT COLUMNS
+                    const pssName = pss['PSS NAME'] || `PSS${i+1}`;
+                    const linemenStr = pss['LINEMAN'] || '';
+                    const helpersStr = pss['HELPER'] || '';
+                    
+                    const linemen = linemenStr.split(',').map(n => n.trim()).filter(n => n);
+                    const helpers = helpersStr.split(',').map(n => n.trim()).filter(n => n);
+                    const allNames = [...linemen, ...helpers];
+                    
+                    for (let j = 0; j < allNames.length; j++) {
+                        const phone = String(9100000000 + (i * 100) + j);
+                        const name = allNames[j];
+                        const staffType = linemen.includes(name) ? 'lineman' : 'helper';
+                        
+                        const docRef = db.collection('users').doc(phone);
+                        batch.set(docRef, {
+                            phone: phone,
+                            name: name,
+                            role: 'staff',
+                            staffType: staffType,
+                            pssStation: pssName,
+                            names: allNames,
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            isActive: true
+                        });
+                        
+                        batchCount++;
+                        staffCount++;
+                        if (batchCount === 500) {
+                            await batch.commit();
+                            log(`✅ Batch committed (${totalWrites + 500} writes)`, 'success');
+                            batch = db.batch();
+                            batchCount = 0;
+                        }
+                        totalWrites++;
+                    }
+                }
+                updateProgress(90, `${staffCount} staff queued`);
+
+                // Commit final batch
+                if (batchCount > 0) {
+                    await batch.commit();
+                    log(`✅ Final batch committed (${totalWrites} total writes)`, 'success');
+                }
+
+                updateProgress(100, 'Complete!');
+                log('', 'info');
+                log('🎉 UPLOAD COMPLETE!', 'success');
+                log(`✅ ${adminData.length} admins created`, 'success');
+                log(`✅ ${pssData.length} PSS stations created`, 'success');
+                log(`✅ ${staffCount} staff users created`, 'success');
+                log('', 'info');
+                log('🚀 Next: firebase deploy', 'warning');
+                log(`📱 Login with: ${adminData[0]['phone number']}`, 'warning');
+
+                uploadBtn.textContent = '✅ Upload Complete!';
+                uploadBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+
+            } catch (error) {
+                log('❌ ERROR: ' + error.message, 'error');
+                console.error(error);
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = '🔄 Try Again';
+            }
+        }
+    </script>
+</body>
+</html>

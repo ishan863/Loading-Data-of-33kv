@@ -1,0 +1,1523 @@
+/* ============================================
+   DATA ENTRY FORM - 127 COLUMNS
+   Step Wizard: PSS Selection → I/C → PTR → Feeders → Transformer → Review
+   ============================================ */
+
+:root {
+    --form-primary: #06b6d4;
+    --form-secondary: #0891b2;
+    --form-success: #10b981;
+    --form-error: #ef4444;
+    --form-warning: #f59e0b;
+    --form-border: rgba(255, 255, 255, 0.15);
+    --form-shadow: rgba(0, 0, 0, 0.1);
+    --form-glass: rgba(255, 255, 255, 0.08);
+}
+
+/* ============================================
+   FORM MODAL OVERLAY
+   ============================================ */
+
+.form-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    z-index: 2000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    animation: fadeIn 0.3s ease;
+}
+
+.form-modal-overlay.active {
+    display: flex;
+}
+
+/* ============================================
+   FORM CONTAINER
+   ============================================ */
+
+.form-modal {
+    width: 95%;
+    max-width: 1200px;
+    max-height: 90vh;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.95), rgba(236, 72, 153, 0.95));
+    backdrop-filter: blur(30px);
+    border: 1px solid var(--form-border);
+    border-radius: 24px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: slideInUp 0.4s ease;
+}
+
+/* ============================================
+   FORM HEADER
+   ============================================ */
+
+.form-header {
+    background: rgba(255, 255, 255, 0.1);
+    border-bottom: 1px solid var(--form-border);
+    padding: 1.5rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.form-header-left {
+    flex: 1;
+}
+
+.form-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: white;
+    margin: 0 0 0.3rem 0;
+}
+
+.form-subtitle {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+    margin: 0;
+}
+
+.btn-close-form {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: white;
+    font-size: 24px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-close-form:hover {
+    background: rgba(239, 68, 68, 0.3);
+    transform: rotate(90deg);
+}
+
+/* ============================================
+   PROGRESS STEPPER
+   ============================================ */
+
+.form-progress {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid var(--form-border);
+}
+
+.progress-steps {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: relative;
+    margin-bottom: 1rem;
+}
+
+.progress-line {
+    position: absolute;
+    top: 20px;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.2);
+    z-index: 0;
+}
+
+.progress-line-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #10b981, #059669);
+    transition: width 0.4s ease;
+    width: 0%;
+    border-radius: 3px;
+}
+
+.progress-step {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.step-circle {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    border: 3px solid transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.6);
+    transition: all 0.3s ease;
+}
+
+.progress-step.active .step-circle {
+    background: linear-gradient(135deg, #10b981, #059669);
+    border-color: white;
+    color: white;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.5);
+}
+
+.progress-step.completed .step-circle {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+}
+
+.progress-step.completed .step-circle::before {
+    content: '✓';
+}
+
+.step-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.6);
+    white-space: nowrap;
+    transition: all 0.3s ease;
+}
+
+.progress-step.active .step-label,
+.progress-step.completed .step-label {
+    color: white;
+}
+
+/* Progress Bar Below Steps */
+.overall-progress-bar {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 1rem;
+}
+
+.overall-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #10b981, #059669);
+    transition: width 0.4s ease;
+    width: 0%;
+    border-radius: 10px;
+}
+
+/* ============================================
+   FORM BODY (SCROLLABLE CONTENT)
+   ============================================ */
+
+.form-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 2rem;
+}
+
+.form-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.form-body::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.form-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+.form-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+/* ============================================
+   FORM STEPS
+   ============================================ */
+
+.form-step {
+    display: none;
+    animation: fadeInRight 0.4s ease;
+}
+
+.form-step.active {
+    display: block;
+}
+
+.step-header {
+    margin-bottom: 2rem;
+}
+
+.step-title {
+    font-size: 28px;
+    font-weight: 800;
+    color: white;
+    margin: 0 0 0.5rem 0;
+}
+
+.step-description {
+    font-size: 15px;
+    color: rgba(255, 255, 255, 0.7);
+    margin: 0;
+    line-height: 1.6;
+}
+
+/* ============================================
+   STEP 1: PSS & PERSONNEL SELECTION
+   ============================================ */
+
+.selection-cards {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+}
+
+.selection-card {
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(15px);
+    border: 2px solid var(--form-border);
+    border-radius: 16px;
+    padding: 2rem;
+    transition: all 0.3s ease;
+}
+
+.selection-card:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+}
+
+.selection-card-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.selection-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+}
+
+.selection-card-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: white;
+    margin: 0;
+}
+
+/* ============================================
+   FORM FIELDS
+   ============================================ */
+
+.form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    color: white;
+    margin-bottom: 0.6rem;
+}
+
+.form-label.required::after {
+    content: ' *';
+    color: #ef4444;
+}
+
+.form-input,
+.form-select,
+.form-textarea {
+    width: 100%;
+    padding: 0.9rem 1.2rem;
+    background: #1e293b;
+    border: 2px solid rgba(6, 182, 212, 0.3);
+    border-radius: 12px;
+    color: white;
+    font-size: 15px;
+    font-family: 'Inter', sans-serif;
+    transition: all 0.3s ease;
+    box-sizing: border-box;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+}
+
+.form-select {
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    background-size: 1.5rem;
+    padding-right: 2.5rem;
+}
+
+.form-select option {
+    background: #1e293b;
+    color: white;
+    padding: 10px;
+    border: none;
+    outline: none;
+}
+
+.form-select option:checked {
+    background: linear-gradient(#06b6d4, #06b6d4);
+    background-color: #06b6d4 !important;
+    color: white;
+}
+
+.form-input::placeholder,
+.form-textarea::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus {
+    outline: none;
+    border-color: var(--form-primary);
+    background-color: #0f172a;
+    box-shadow: 0 0 0 4px rgba(6, 182, 212, 0.2);
+}
+
+.form-select:focus {
+    background-color: #0f172a;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2306b6d4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 1rem center;
+    background-size: 1.5rem;
+}
+
+.form-input.error,
+.form-select.error {
+    border-color: var(--form-error);
+}
+
+.form-input.success,
+.form-select.success {
+    border-color: var(--form-success);
+}
+
+.form-select {
+    cursor: pointer;
+}
+
+/* CRITICAL FIX: Native select for feeder PTR - prevent custom dropdown initialization */
+select[id*="feeder"].form-select {
+    display: block !important;
+    position: relative !important;
+    z-index: 1 !important;
+}
+
+select[id*="feeder"].form-select:focus {
+    z-index: 1 !important;
+}
+
+/* Hide custom dropdown container if accidentally created for feeders */
+select[id*="feeder"].form-select + .custom-select-container {
+    display: none !important;
+}
+
+/* Hide native select when custom select is initialized */
+.form-select[style*="display: none"] {
+    display: none !important;
+}
+
+.form-textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+/* Input Icons */
+.input-with-icon {
+    position: relative;
+}
+
+.input-icon {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255, 255, 255, 0.5);
+    pointer-events: none;
+}
+
+/* Error & Success Messages */
+.form-error-message,
+.form-success-message {
+    font-size: 13px;
+    margin-top: 0.5rem;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.form-error-message {
+    color: #ef4444;
+}
+
+.form-success-message {
+    color: #10b981;
+}
+
+/* ============================================
+   STEP 2-5: DATA ENTRY SECTIONS
+   ============================================ */
+
+.data-section {
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(15px);
+    border: 1px solid var(--form-border);
+    border-radius: 16px;
+    padding: 2rem;
+    margin-bottom: 1.5rem;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--form-border);
+}
+
+.section-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: white;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.section-badge {
+    padding: 0.3rem 0.8rem;
+    background: rgba(16, 185, 129, 0.2);
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #10b981;
+}
+
+/* Voltage/Load Entry Grid */
+.entry-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2rem;
+    margin-bottom: 1.5rem;
+}
+
+.entry-block {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 1.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.entry-block-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: white;
+    margin: 0 0 1.2rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.value-time-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+/* Feeder Grid (6 Feeders) */
+.feeders-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+}
+
+.feeder-card {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--form-border);
+    border-radius: 14px;
+    padding: 1.5rem;
+    position: relative;
+    isolation: isolate; /* Create new stacking context */
+}
+
+.feeder-card .form-row {
+    position: relative;
+    z-index: auto;
+}
+
+/* PTR dropdown and all form groups in feeder cards - keep flat z-index */
+.feeder-card .form-group {
+    position: relative;
+    z-index: auto;
+}
+
+/* Boost ONLY when actively focused/interacting */
+.feeder-card .form-group:has(input:focus),
+.feeder-card .form-group:has(select:focus),
+.feeder-card .form-group:has(.time-picker-input:focus) {
+    z-index: 9999 !important;
+    isolation: isolate;
+}
+
+.feeder-header {
+    font-size: 17px;
+    font-weight: 700;
+    color: white;
+    margin: 0 0 1.2rem 0;
+    padding-bottom: 0.8rem;
+    border-bottom: 1px solid var(--form-border);
+}
+
+/* ============================================
+   STEP 6: REVIEW & SUBMIT
+   ============================================ */
+
+.review-summary {
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(15px);
+    border: 1px solid var(--form-border);
+    border-radius: 16px;
+    padding: 2rem;
+}
+
+.review-section {
+    margin-bottom: 2rem;
+}
+
+.review-section-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: white;
+    margin: 0 0 1rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.review-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.review-item {
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 1rem;
+}
+
+.review-label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    margin: 0 0 0.3rem 0;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.review-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: white;
+    margin: 0;
+}
+
+/* ============================================
+   FORM FOOTER (NAVIGATION BUTTONS)
+   ============================================ */
+
+.form-footer {
+    background: rgba(255, 255, 255, 0.08);
+    border-top: 1px solid var(--form-border);
+    padding: 1.5rem 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.form-footer-left {
+    display: flex;
+    gap: 1rem;
+}
+
+.btn-save-draft {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--form-border);
+    color: white;
+    padding: 0.9rem 1.8rem;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-save-draft:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.form-footer-right {
+    display: flex;
+    gap: 1rem;
+}
+
+.btn-form-nav {
+    padding: 0.9rem 2rem;
+    border-radius: 12px;
+    border: none;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 700;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.btn-prev {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--form-border);
+    color: white;
+}
+
+.btn-prev:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateX(-3px);
+}
+
+.btn-next {
+    background: linear-gradient(135deg, #06b6d4, #0891b2);
+    color: white;
+    box-shadow: 0 4px 15px rgba(6, 182, 212, 0.4);
+}
+
+.btn-next:hover:not(:disabled) {
+    transform: translateX(3px);
+    box-shadow: 0 6px 25px rgba(6, 182, 212, 0.6);
+}
+
+.btn-submit {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: white;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);
+}
+
+.btn-submit:hover:not(:disabled) {
+    transform: translateY(-3px);
+    box-shadow: 0 6px 25px rgba(16, 185, 129, 0.6);
+}
+
+.btn-form-nav:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ============================================
+   AUTO-SAVE INDICATOR
+   ============================================ */
+
+.autosave-indicator {
+    position: absolute;
+    top: 1.5rem;
+    right: 2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.autosave-indicator.saving {
+    opacity: 1;
+    color: #f59e0b;
+}
+
+.autosave-indicator.saved {
+    opacity: 1;
+    color: #10b981;
+}
+
+.autosave-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* ============================================
+   VALIDATION TOOLTIPS
+   ============================================ */
+
+.validation-tooltip {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1e293b;
+    color: white;
+    padding: 0.6rem 1rem;
+    border-radius: 8px;
+    font-size: 13px;
+    white-space: nowrap;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.validation-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: #1e293b;
+}
+
+.form-group:hover .validation-tooltip,
+.form-input:focus + .validation-tooltip {
+    opacity: 1;
+}
+
+/* ============================================
+   RESPONSIVE DESIGN - MOBILE OPTIMIZED
+   ============================================ */
+
+/* Tablet & Small Desktop (1024px and below) */
+@media (max-width: 1024px) {
+    .selection-cards {
+        grid-template-columns: 1fr;
+    }
+
+    .entry-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .feeders-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .form-modal {
+        width: 98%;
+        max-height: 92vh;
+    }
+}
+
+/* Tablet Portrait (768px and below) */
+@media (max-width: 768px) {
+    .form-modal {
+        width: 100%;
+        height: 100%;
+        max-height: 100vh;
+        border-radius: 0;
+        max-width: none;
+    }
+
+    .form-header {
+        padding: 1rem;
+        flex-wrap: wrap;
+    }
+    
+    .form-title {
+        font-size: 20px;
+    }
+    
+    .form-subtitle {
+        font-size: 13px;
+    }
+    
+    .btn-close-form {
+        width: 36px;
+        height: 36px;
+        font-size: 20px;
+    }
+    
+    .form-progress {
+        padding: 1rem;
+    }
+
+    .progress-steps {
+        overflow-x: auto;
+        overflow-y: hidden;
+        justify-content: flex-start;
+        gap: 1.5rem;
+        padding: 0.5rem 0;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .progress-step {
+        min-width: 80px;
+    }
+
+    .step-label {
+        font-size: 11px;
+    }
+    
+    .form-body {
+        padding: 1rem;
+    }
+    
+    .form-section-title {
+        font-size: 18px;
+    }
+
+    .form-row {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .value-time-row {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+    }
+    
+    .form-input,
+    .form-select {
+        min-height: 44px; /* Touch-friendly */
+        font-size: 16px; /* Prevent iOS zoom */
+    }
+    
+    .selection-card {
+        padding: 1.25rem;
+    }
+    
+    .staff-cards-container {
+        gap: 1rem;
+    }
+    
+    .staff-card {
+        min-height: 48px;
+        padding: 1rem;
+        font-size: 14px;
+    }
+
+    .form-footer {
+        flex-direction: column;
+        gap: 1rem;
+        padding: 1rem;
+    }
+
+    .form-footer-left,
+    .form-footer-right {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    .btn-primary,
+    .btn-secondary {
+        width: 100%;
+        min-height: 48px;
+        padding: 0.875rem 1.5rem;
+        font-size: 15px;
+    }
+}
+
+/* Mobile Landscape & Large Phones (640px and below) */
+@media (max-width: 640px) {
+    /* Fix for mobile - prevent PTR dropdown from blocking inputs */
+    .feeder-card,
+    .equipment-section,
+    .ic-section {
+        position: relative;
+        z-index: auto !important;
+    }
+    
+    /* Stack form fields vertically on mobile */
+    .form-row {
+        grid-template-columns: 1fr !important;
+        gap: 1rem;
+    }
+    
+    /* Ensure dropdowns don't overflow */
+    .form-select {
+        position: relative;
+        z-index: 10;
+        width: 100%;
+    }
+    
+    /* Fix input fields on mobile */
+    .form-input {
+        position: relative;
+        z-index: 1;
+        width: 100%;
+        touch-action: manipulation;
+    }
+    
+    /* Prevent select from covering other elements */
+    select.form-select {
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 12 12"><path fill="white" d="M6 9L1 4h10z"/></svg>');
+        background-repeat: no-repeat;
+        background-position: right 12px center;
+        padding-right: 40px;
+    }
+    
+    /* Mobile-specific spacing */
+    .feeders-grid {
+        grid-template-columns: 1fr !important;
+    }
+    
+    .feeder-card {
+        padding: 1rem;
+    }
+    
+    .form-header {
+        padding: 0.875rem;
+    }
+    
+    .form-title {
+        font-size: 18px;
+    }
+    
+    .form-subtitle {
+        font-size: 12px;
+    }
+    
+    .btn-close-form {
+        width: 32px;
+        height: 32px;
+        font-size: 18px;
+    }
+    
+    .form-progress {
+        padding: 0.875rem;
+    }
+    
+    .progress-steps {
+        gap: 1rem;
+    }
+    
+    .step-number {
+        width: 36px;
+        height: 36px;
+        font-size: 14px;
+    }
+    
+    .step-label {
+        font-size: 10px;
+        display: none; /* Hide labels on small screens */
+    }
+    
+    .form-body {
+        padding: 0.875rem;
+    }
+    
+    .form-section-title {
+        font-size: 16px;
+        padding: 0.875rem 1rem;
+    }
+    
+    .selection-card {
+        padding: 1rem;
+    }
+    
+    .selection-card-title {
+        font-size: 16px;
+    }
+    
+    .form-label {
+        font-size: 13px;
+    }
+    
+    .form-input,
+    .form-select,
+    textarea.form-input {
+        min-height: 44px;
+        padding: 0.75rem;
+        font-size: 16px;
+    }
+    
+    .equipment-section {
+        padding: 1rem;
+    }
+    
+    .equipment-header h4 {
+        font-size: 15px;
+    }
+    
+    .equipment-inputs {
+        gap: 0.875rem;
+    }
+    
+    .input-group label {
+        font-size: 12px;
+    }
+}
+
+/* Mobile Portrait (480px and below) */
+@media (max-width: 480px) {
+    :root {
+        font-size: 14px;
+    }
+    
+    .form-header {
+        flex-direction: row;
+        justify-content: space-between;
+        padding: 0.75rem;
+    }
+    
+    .form-header-left {
+        flex: 1;
+    }
+    
+    .form-title {
+        font-size: 16px;
+        margin-bottom: 0.25rem;
+    }
+    
+    .form-subtitle {
+        font-size: 11px;
+    }
+    
+    .progress-steps {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none; /* Firefox */
+        -ms-overflow-style: none; /* IE/Edge */
+    }
+    
+    .progress-steps::-webkit-scrollbar {
+        display: none; /* Chrome/Safari */
+    }
+    
+    .progress-step {
+        flex-shrink: 0;
+        min-width: 60px;
+    }
+    
+    .step-number {
+        width: 32px;
+        height: 32px;
+        font-size: 13px;
+        margin-bottom: 0.25rem;
+    }
+    
+    .form-body {
+        padding: 0.75rem;
+    }
+    
+    .form-section-title {
+        font-size: 15px;
+        padding: 0.75rem;
+        margin: 0 -0.75rem 1rem;
+    }
+    
+    .selection-cards {
+        gap: 0.875rem;
+    }
+    
+    .selection-card {
+        padding: 0.875rem;
+    }
+    
+    .selection-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 18px;
+    }
+    
+    .selection-card-title {
+        font-size: 15px;
+    }
+    
+    .form-group {
+        margin-bottom: 0.875rem;
+    }
+    
+    .form-label {
+        font-size: 12px;
+        margin-bottom: 0.375rem;
+    }
+    
+    .form-input,
+    .form-select {
+        min-height: 48px;
+        padding: 0.875rem;
+        font-size: 16px; /* Prevent zoom */
+    }
+    
+    /* Staff cards optimization */
+    .staff-cards-container {
+        gap: 0.75rem;
+    }
+    
+    .staff-card {
+        min-height: 52px;
+        padding: 0.875rem 1rem;
+        font-size: 14px;
+    }
+    
+    .staff-card-name {
+        font-size: 13px;
+    }
+    
+    .staff-card-check {
+        width: 22px;
+        height: 22px;
+        font-size: 12px;
+    }
+    
+    /* Equipment sections */
+    .equipment-section {
+        padding: 0.875rem;
+        margin-bottom: 1rem;
+    }
+    
+    .equipment-header {
+        padding: 0.75rem;
+    }
+    
+    .equipment-header h4 {
+        font-size: 14px;
+    }
+    
+    .equipment-inputs {
+        grid-template-columns: 1fr !important;
+        gap: 0.75rem;
+        padding: 0.75rem;
+    }
+    
+    .input-group {
+        margin-bottom: 0;
+    }
+    
+    .input-group label {
+        font-size: 11px;
+    }
+    
+    .input-group input {
+        min-height: 44px;
+        font-size: 15px;
+    }
+    
+    /* Footer buttons */
+    .form-footer {
+        padding: 0.875rem;
+        gap: 0.75rem;
+        position: sticky;
+        bottom: 0;
+        background: linear-gradient(135deg, rgba(139, 92, 246, 0.98), rgba(236, 72, 153, 0.98));
+        backdrop-filter: blur(20px);
+        border-top: 1px solid var(--form-border);
+    }
+    
+    .btn-primary,
+    .btn-secondary,
+    .btn-draft {
+        width: 100%;
+        min-height: 48px;
+        padding: 1rem;
+        font-size: 14px;
+        font-weight: 600;
+    }
+    
+    /* Review summary */
+    .review-grid {
+        grid-template-columns: 1fr !important;
+    }
+    
+    .review-card {
+        padding: 1rem;
+    }
+    
+    .review-card h4 {
+        font-size: 14px;
+    }
+}
+
+/* Extra Small Devices (360px and below) */
+@media (max-width: 360px) {
+    .form-title {
+        font-size: 15px;
+    }
+    
+    .form-subtitle {
+        font-size: 10px;
+    }
+    
+    .btn-close-form {
+        width: 30px;
+        height: 30px;
+        font-size: 16px;
+    }
+    
+    .step-number {
+        width: 30px;
+        height: 30px;
+        font-size: 12px;
+    }
+    
+    .selection-card {
+        padding: 0.75rem;
+    }
+    
+    .form-input,
+    .form-select {
+        min-height: 44px;
+        padding: 0.75rem;
+    }
+    
+    .staff-card {
+        min-height: 48px;
+        padding: 0.75rem;
+        font-size: 13px;
+    }
+}
+
+/* Landscape Orientation */
+@media (max-height: 500px) and (orientation: landscape) {
+    .form-modal {
+        max-height: 100vh;
+    }
+    
+    .form-header {
+        padding: 0.5rem 1rem;
+    }
+    
+    .form-title {
+        font-size: 16px;
+    }
+    
+    .form-subtitle {
+        display: none;
+    }
+    
+    .form-progress {
+        padding: 0.5rem 1rem;
+    }
+    
+    .progress-steps {
+        gap: 1rem;
+    }
+    
+    .step-label {
+        display: none;
+    }
+    
+    .form-body {
+        padding: 0.75rem 1rem;
+    }
+    
+    .form-footer {
+        padding: 0.75rem 1rem;
+    }
+}
+
+/* Touch Device Optimizations */
+@media (hover: none) and (pointer: coarse) {
+    /* Ensure all interactive elements are touch-friendly */
+    button,
+    .btn,
+    .staff-card,
+    .selection-card,
+    .form-input,
+    .form-select {
+        min-height: 44px;
+        min-width: 44px;
+    }
+    
+    /* Remove hover effects on touch devices */
+    .staff-card:hover,
+    .selection-card:hover,
+    .btn:hover {
+        transform: none;
+    }
+    
+    /* Add active state feedback */
+    .staff-card:active,
+    .btn:active {
+        opacity: 0.8;
+        transform: scale(0.98);
+    }
+    
+    /* Improve scrolling */
+    .form-body,
+    .progress-steps,
+    .staff-cards-container {
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    /* Prevent double-tap zoom on buttons */
+    button,
+    .btn {
+        touch-action: manipulation;
+    }
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideInUp {
+    from {
+        opacity: 0;
+        transform: translateY(50px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeInRight {
+    from {
+        opacity: 0;
+        transform: translateX(30px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.3;
+    }
+}
+
+/* ============================================
+   iOS SAFARI & CROSS-BROWSER FIXES
+   ============================================ */
+
+/* iOS Safari specific fixes */
+@supports (-webkit-touch-callout: none) {
+    .form-input,
+    .form-select,
+    .form-textarea {
+        font-size: 16px !important; /* Prevents zoom on iOS */
+        -webkit-user-select: text;
+        user-select: text;
+    }
+    
+    .form-select {
+        background-color: #1e293b !important;
+        color: white !important;
+    }
+    
+    .form-select option {
+        background-color: #1e293b !important;
+        color: white !important;
+        padding: 12px 10px;
+    }
+    
+    .form-select option:checked {
+        background: linear-gradient(#06b6d4, #06b6d4) !important;
+        background-color: #06b6d4 !important;
+        color: white !important;
+    }
+}
+
+/* Firefox specific fixes */
+@-moz-document url-prefix() {
+    .form-select {
+        background-color: #1e293b;
+    }
+    
+    .form-select option {
+        background-color: #1e293b;
+        color: white;
+        padding: 12px 10px;
+    }
+    
+    .form-select option:checked {
+        background-color: #06b6d4;
+        color: white;
+    }
+}
+
+/* Chrome, Edge, and other modern browsers */
+.form-select::-webkit-scrollbar {
+    width: 8px;
+}
+
+.form-select::-webkit-scrollbar-track {
+    background: #1e293b;
+}
+
+.form-select::-webkit-scrollbar-thumb {
+    background: #06b6d4;
+    border-radius: 4px;
+}
+
+.form-select::-webkit-scrollbar-thumb:hover {
+    background: #0891b2;
+}
+
+/* ============================================
+   PRINT STYLES (FOR REVIEW)
+   ============================================ */
+
+@media print {
+    .form-header,
+    .form-progress,
+    .form-footer {
+        display: none;
+    }
+
+    .form-modal {
+        width: 100%;
+        max-height: none;
+        background: white;
+        color: black;
+    }
+
+    .form-body {
+        overflow: visible;
+    }
+}

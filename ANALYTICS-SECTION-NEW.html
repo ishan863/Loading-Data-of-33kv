@@ -1,0 +1,184 @@
+<!-- ============================================ -->
+<!-- PASTE THIS TO REPLACE OLD ANALYTICS SECTION -->
+<!-- Replace from line 1100 to line 1184 in index.html -->
+<!-- ============================================ -->
+
+            <div id="analyticsTab" class="admin-tab-content">
+                <!-- Dashboard Header -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                    <div>
+                        <h2 style="margin: 0; font-size: 28px; font-weight: 700; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; color: transparent;">📈 Advanced Analytics Dashboard</h2>
+                        <p style="margin: 0.5rem 0 0 0; color: rgba(255,255,255,0.6); font-size: 14px;">Comprehensive PSS Performance Monitoring & Insights</p>
+                    </div>
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <button onclick="refreshAnalytics()" style="padding: 12px 24px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 14px; box-shadow: 0 4px 15px rgba(59,130,246,0.3); transition: all 0.3s;">
+                            🔄 Refresh Data
+                        </button>
+                    </div>
+                </div>
+
+                <!-- KPI Cards Section -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin-bottom: 3rem;">
+                    <div class="kpi-card" style="background: linear-gradient(135deg, rgba(239,68,68,0.15) 0%, rgba(220,38,38,0.05) 100%); border: 2px solid rgba(239,68,68,0.3); border-radius: 16px; padding: 1.5rem; position: relative; overflow: hidden;">
+                        <div style="position: absolute; top: -20px; right: -20px; font-size: 80px; opacity: 0.1;">⚡</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem;">Highest Feeder Load</div>
+                        <div id="kpi-highest-load" style="font-size: 36px; font-weight: 700; color: #fca5a5; margin-bottom: 0.3rem;">---</div>
+                        <div style="font-size: 11px; color: rgba(255,255,255,0.5);">Peak Amperage Recorded</div>
+                    </div>
+
+                    <div class="kpi-card" style="background: linear-gradient(135deg, rgba(59,130,246,0.15) 0%, rgba(37,99,235,0.05) 100%); border: 2px solid rgba(59,130,246,0.3); border-radius: 16px; padding: 1.5rem; position: relative; overflow: hidden;">
+                        <div style="position: absolute; top: -20px; right: -20px; font-size: 80px; opacity: 0.1;">🔋</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem;">Average Voltage</div>
+                        <div id="kpi-avg-voltage" style="font-size: 36px; font-weight: 700; color: #60a5fa; margin-bottom: 0.3rem;">---</div>
+                        <div style="font-size: 11px; color: rgba(255,255,255,0.5);">Across All PSS Stations</div>
+                    </div>
+
+                    <div class="kpi-card" style="background: linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(217,119,6,0.05) 100%); border: 2px solid rgba(245,158,11,0.3); border-radius: 16px; padding: 1.5rem; position: relative; overflow: hidden;">
+                        <div style="position: absolute; top: -20px; right: -20px; font-size: 80px; opacity: 0.1;">⚙️</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem;">Most Fluctuations</div>
+                        <div id="kpi-fluctuating-feeder" style="font-size: 20px; font-weight: 700; color: #fbbf24; margin-bottom: 0.3rem;">---</div>
+                        <div style="font-size: 11px; color: rgba(255,255,255,0.5);">Voltage Instability Alert</div>
+                    </div>
+
+                    <div class="kpi-card" style="background: linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(5,150,105,0.05) 100%); border: 2px solid rgba(16,185,129,0.3); border-radius: 16px; padding: 1.5rem; position: relative; overflow: hidden;">
+                        <div style="position: absolute; top: -20px; right: -20px; font-size: 80px; opacity: 0.1;">🏭</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem;">PSS Stations</div>
+                        <div id="kpi-total-pss" style="font-size: 36px; font-weight: 700; color: #34d399; margin-bottom: 0.3rem;">---</div>
+                        <div style="font-size: 11px; color: rgba(255,255,255,0.5);">Active Monitoring Points</div>
+                    </div>
+
+                    <div class="kpi-card" style="background: linear-gradient(135deg, rgba(168,85,247,0.15) 0%, rgba(147,51,234,0.05) 100%); border: 2px solid rgba(168,85,247,0.3); border-radius: 16px; padding: 1.5rem; position: relative; overflow: hidden;">
+                        <div style="position: absolute; top: -20px; right: -20px; font-size: 80px; opacity: 0.1;">🔌</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem;">Avg Load per PSS</div>
+                        <div id="kpi-avg-load-pss" style="font-size: 36px; font-weight: 700; color: #c4b5fd; margin-bottom: 0.3rem;">---</div>
+                        <div style="font-size: 11px; color: rgba(255,255,255,0.5);">Mean Station Load (A)</div>
+                    </div>
+
+                    <div class="kpi-card" style="background: linear-gradient(135deg, rgba(6,182,212,0.15) 0%, rgba(8,145,178,0.05) 100%); border: 2px solid rgba(6,182,212,0.3); border-radius: 16px; padding: 1.5rem; position: relative; overflow: hidden;">
+                        <div style="position: absolute; top: -20px; right: -20px; font-size: 80px; opacity: 0.1;">📉</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem;">Lowest Voltage</div>
+                        <div id="kpi-lowest-voltage" style="font-size: 36px; font-weight: 700; color: #22d3ee; margin-bottom: 0.3rem;">---</div>
+                        <div style="font-size: 11px; color: rgba(255,255,255,0.5);">Critical Voltage Point</div>
+                    </div>
+                </div>
+
+                <!-- Section A: PSS-Level Overview -->
+                <div style="margin-bottom: 3rem;">
+                    <h3 style="color: #60a5fa; margin-bottom: 1.5rem; font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="background: rgba(59,130,246,0.2); padding: 8px 12px; border-radius: 8px;">📊</span>
+                        Section A: PSS-Level Overview
+                    </h3>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem;">
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(59,130,246,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #93c5fd; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">📊 Average Load by PSS Station</h4>
+                            <canvas id="chartPSSAvgLoad" style="width: 100%; height: 300px;"></canvas>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(59,130,246,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #93c5fd; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">⚡ Voltage Stability by PSS</h4>
+                            <canvas id="chartPSSVoltageStability" style="width: 100%; height: 300px;"></canvas>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(59,130,246,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3); grid-column: span 2;">
+                            <h4 style="color: #93c5fd; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">🔥 Load Intensity Heatmap</h4>
+                            <canvas id="chartLoadHeatmap" style="width: 100%; height: 200px;"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section B: Feeder-Level Analysis -->
+                <div style="margin-bottom: 3rem;">
+                    <h3 style="color: #34d399; margin-bottom: 1.5rem; font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="background: rgba(16,185,129,0.2); padding: 8px 12px; border-radius: 8px;">⚡</span>
+                        Section B: Feeder-Level Analysis
+                    </h3>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;">
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(16,185,129,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #6ee7b7; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">📈 Feeder Load Trends</h4>
+                            <canvas id="chartFeederLoadTrend" style="width: 100%; height: 300px;"></canvas>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(16,185,129,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #6ee7b7; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">📊 Feeder Contribution</h4>
+                            <canvas id="chartFeederContribution" style="width: 100%; height: 300px;"></canvas>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(16,185,129,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #6ee7b7; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">🕸️ Feeder Performance Radar</h4>
+                            <canvas id="chartFeederRadar" style="width: 100%; height: 300px;"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section C: Voltage Stability -->
+                <div style="margin-bottom: 3rem;">
+                    <h3 style="color: #fbbf24; margin-bottom: 1.5rem; font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="background: rgba(245,158,11,0.2); padding: 8px 12px; border-radius: 8px;">🔋</span>
+                        Section C: Voltage Stability Analysis
+                    </h3>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;">
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(245,158,11,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #fcd34d; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">⚡ Voltage vs Load (Dual-Axis)</h4>
+                            <canvas id="chartVoltageLoadDual" style="width: 100%; height: 300px;"></canvas>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(245,158,11,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #fcd34d; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">📦 Voltage Range (Box Plot)</h4>
+                            <canvas id="chartVoltageBoxPlot" style="width: 100%; height: 300px;"></canvas>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(245,158,11,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #fcd34d; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">📉 Voltage Trend</h4>
+                            <canvas id="chartVoltageTrend" style="width: 100%; height: 300px;"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section D: Time-Based Insights -->
+                <div style="margin-bottom: 3rem;">
+                    <h3 style="color: #c4b5fd; margin-bottom: 1.5rem; font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="background: rgba(168,85,247,0.2); padding: 8px 12px; border-radius: 8px;">⏰</span>
+                        Section D: Time-Based Load Insights
+                    </h3>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem;">
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(168,85,247,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #d8b4fe; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">⏰ Peak Load Time Distribution</h4>
+                            <canvas id="chartTimeDistribution" style="width: 100%; height: 300px;"></canvas>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(168,85,247,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #d8b4fe; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">📅 Daily Load Calendar</h4>
+                            <canvas id="chartCalendarHeatmap" style="width: 100%; height: 300px;"></canvas>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(168,85,247,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3); grid-column: span 2;">
+                            <h4 style="color: #d8b4fe; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">🔥 Hour × Feeder Load Matrix</h4>
+                            <canvas id="chartHourFeederMatrix" style="width: 100%; height: 250px;"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section E: Comparative & Summary -->
+                <div style="margin-bottom: 3rem;">
+                    <h3 style="color: #22d3ee; margin-bottom: 1.5rem; font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="background: rgba(6,182,212,0.2); padding: 8px 12px; border-radius: 8px;">📊</span>
+                        Section E: Comparative Analysis & Summary
+                    </h3>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem;">
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(6,182,212,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #67e8f9; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">🍩 Feeder Load Distribution</h4>
+                            <canvas id="chartFeederDonut" style="width: 100%; height: 300px;"></canvas>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(6,182,212,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #67e8f9; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">📊 Voltage-Load Scatter</h4>
+                            <canvas id="chartVoltageLoadScatter" style="width: 100%; height: 300px;"></canvas>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(6,182,212,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3); grid-column: span 2;">
+                            <h4 style="color: #67e8f9; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">🫧 Load Intensity Bubble Chart</h4>
+                            <canvas id="chartLoadBubble" style="width: 100%; height: 250px;"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>

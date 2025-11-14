@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload PSS Data to Firestore</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 900px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 15px;
+        }
+        .section {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 25px;
+        }
+        .section h2 {
+            color: #333;
+            font-size: 20px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        textarea {
+            min-height: 120px;
+            font-family: monospace;
+            resize: vertical;
+        }
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+            transition: transform 0.2s;
+        }
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+        }
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .btn-secondary {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            margin-top: 15px;
+        }
+        .log {
+            background: #1e293b;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            max-height: 500px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 8px 12px;
+            border-radius: 5px;
+            border-left: 4px solid;
+        }
+        .log-entry.success {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border-left-color: #10b981;
+        }
+        .log-entry.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border-left-color: #ef4444;
+        }
+        .log-entry.info {
+            background: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+            border-left-color: #3b82f6;
+        }
+        .log-entry.warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+            border-left-color: #f59e0b;
+        }
+        .instructions {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 20px;
+            margin-bottom: 25px;
+            border-radius: 8px;
+        }
+        .instructions h3 {
+            color: #856404;
+            margin-bottom: 12px;
+            font-size: 18px;
+        }
+        .instructions p, .instructions ul {
+            color: #856404;
+            font-size: 14px;
+            line-height: 1.8;
+        }
+        .instructions ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        .progress {
+            margin-top: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            height: 30px;
+            overflow: hidden;
+            display: none;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #667eea15, #764ba215);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            border: 2px solid #667eea30;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Upload PSS Data to Firestore</h1>
+        <p class="subtitle">Complete database setup with your CSV data</p>
+
+        <div class="instructions">
+            <h3>📋 What This Will Do:</h3>
+            <ul>
+                <li>✅ Create admin user with YOUR phone number</li>
+                <li>✅ Load ALL PSS stations from your CSV file</li>
+                <li>✅ Create staff users for each PSS with linemen and helpers</li>
+                <li>✅ Generate phone numbers automatically for staff</li>
+                <li>✅ Set up all Firestore collections</li>
+            </ul>
+            <p style="margin-top: 15px;"><strong>Note:</strong> Your CSV file should be named <code>PSS_CONFIG_SAMPLE.csv</code> and located in the parent folder.</p>
+        </div>
+
+        <!-- Admin User Setup -->
+        <div class="section">
+            <h2>👤 Admin User Setup</h2>
+            <div class="input-group">
+                <label for="adminPhone">Admin Phone Number (10 digits):</label>
+                <input type="tel" id="adminPhone" placeholder="9876543210" maxlength="10" pattern="[0-9]{10}">
+            </div>
+            <div class="input-group">
+                <label for="adminName">Admin Full Name:</label>
+                <input type="text" id="adminName" placeholder="Raja Patel">
+            </div>
+        </div>
+
+        <!-- CSV Data Input -->
+        <div class="section">
+            <h2>📄 PSS Configuration Data</h2>
+            <div class="input-group">
+                <label for="csvData">Paste your CSV data here (PSS Name, Feeders, Lineman, Helper):</label>
+                <textarea id="csvData" placeholder="PSS Name,Feeders,Lineman,Helper
+KALYAN_PSS,6,&quot;Rajesh Kumar, Suresh Patil&quot;,&quot;Amit Singh, Vijay Sharma&quot;
+THANE_PSS,5,&quot;Ramesh Yadav, Prakash Jadhav&quot;,&quot;Dinesh Pawar&quot;"></textarea>
+            </div>
+            <button class="btn btn-secondary" onclick="loadSampleData()">
+                📥 Load Sample Data from CSV
+            </button>
+        </div>
+
+        <!-- Upload Button -->
+        <button class="btn" id="uploadBtn" onclick="uploadAllData()">
+            🚀 Upload All Data to Firestore
+        </button>
+
+        <!-- Progress -->
+        <div class="progress" id="progress">
+            <div class="progress-bar" id="progressBar">0%</div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats" id="stats" style="display: none;">
+            <div class="stat-card">
+                <div class="stat-value" id="statUsers">0</div>
+                <div class="stat-label">Total Users</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statPSS">0</div>
+                <div class="stat-label">PSS Stations</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statStaff">0</div>
+                <div class="stat-label">Staff Members</div>
+            </div>
+        </div>
+
+        <!-- Log -->
+        <div class="log" id="log"></div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <!-- Firebase Config -->
+    <script src="public/js/firebase-config.js"></script>
+
+    <script>
+        const logDiv = document.getElementById('log');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const progressDiv = document.getElementById('progress');
+        const progressBar = document.getElementById('progressBar');
+        const statsDiv = document.getElementById('stats');
+
+        let totalUsers = 0;
+        let totalPSS = 0;
+        let totalStaff = 0;
+
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.innerHTML = `<strong>${timestamp}</strong> ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateProgress(percent, text) {
+            progressDiv.style.display = 'block';
+            progressBar.style.width = percent + '%';
+            progressBar.textContent = text || (percent + '%');
+        }
+
+        function updateStats() {
+            statsDiv.style.display = 'grid';
+            document.getElementById('statUsers').textContent = totalUsers;
+            document.getElementById('statPSS').textContent = totalPSS;
+            document.getElementById('statStaff').textContent = totalStaff;
+        }
+
+        function loadSampleData() {
+            const sampleCSV = `PSS Name,Feeders,Lineman,Helper
+KALYAN_PSS,6,"Rajesh Kumar, Suresh Patil, Mahesh Joshi","Amit Singh, Vijay Sharma, Santosh More"
+THANE_PSS,5,"Ramesh Yadav, Prakash Jadhav","Dinesh Pawar, Ganesh Shinde"
+MUMBAI_PSS,8,"Anil Desai, Sachin Kadam, Rohit Mehta","Sanjay Patil, Deepak Joshi, Kiran Naik"
+PUNE_PSS,4,"Vishal Kulkarni, Nitin Bhosale","Akash Jadhav, Rahul More"
+NASHIK_PSS,7,"Santosh Pawar, Ravi Sawant, Ajay Patil","Manoj Gaikwad, Sunil Yadav"`;
+            
+            document.getElementById('csvData').value = sampleCSV;
+            log('✅ Sample data loaded', 'success');
+        }
+
+        function parseCSV(csvText) {
+            const lines = csvText.trim().split('\n');
+            const headers = lines[0].split(',').map(h => h.trim());
+            const data = [];
+
+            for (let i = 1; i < lines.length; i++) {
+                if (!lines[i].trim()) continue;
+                
+                const values = [];
+                let current = '';
+                let inQuotes = false;
+                
+                for (let char of lines[i]) {
+                    if (char === '"') {
+                        inQuotes = !inQuotes;
+                    } else if (char === ',' && !inQuotes) {
+                        values.push(current.trim());
+                        current = '';
+                    } else {
+                        current += char;
+                    }
+                }
+                values.push(current.trim());
+
+                const obj = {};
+                headers.forEach((header, idx) => {
+                    obj[header] = values[idx] || '';
+                });
+                data.push(obj);
+            }
+
+            return data;
+        }
+
+        function generatePhoneNumber(baseNumber = 9000000000) {
+            const random = Math.floor(Math.random() * 1000000);
+            return String(baseNumber + random);
+        }
+
+        async function uploadAllData() {
+            const adminPhone = document.getElementById('adminPhone').value.trim();
+            const adminName = document.getElementById('adminName').value.trim();
+            const csvData = document.getElementById('csvData').value.trim();
+
+            // Validation
+            if (!adminPhone || adminPhone.length !== 10 || !/^\d{10}$/.test(adminPhone)) {
+                alert('❌ Please enter a valid 10-digit admin phone number');
+                return;
+            }
+
+            if (!adminName) {
+                alert('❌ Please enter admin name');
+                return;
+            }
+
+            if (!csvData) {
+                alert('❌ Please paste CSV data or load sample data');
+                return;
+            }
+
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = '⏳ Uploading...';
+            logDiv.innerHTML = '';
+            totalUsers = 0;
+            totalPSS = 0;
+            totalStaff = 0;
+
+            try {
+                log('🔥 Starting data upload to Firestore...', 'info');
+                updateProgress(5, 'Initializing...');
+
+                // Parse CSV
+                log('📄 Parsing CSV data...', 'info');
+                const pssData = parseCSV(csvData);
+                log(`✅ Parsed ${pssData.length} PSS stations from CSV`, 'success');
+                updateProgress(10, 'CSV Parsed');
+
+                // 1. Create Admin User
+                log('👤 Creating admin user...', 'info');
+                await db.collection('users').doc(adminPhone).set({
+                    phone: adminPhone,
+                    name: adminName,
+                    role: 'admin',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    isActive: true
+                });
+                totalUsers++;
+                log(`✅ Admin user created: ${adminName} (${adminPhone})`, 'success');
+                updateProgress(20, 'Admin Created');
+
+                // 2. Create PSS Stations and Staff Users
+                let progress = 20;
+                const progressPerPSS = 60 / pssData.length;
+
+                for (let i = 0; i < pssData.length; i++) {
+                    const pss = pssData[i];
+                    const pssName = pss['PSS Name'] || pss['PSS_Name'] || `PSS_${i + 1}`;
+                    const feeders = parseInt(pss['Feeders'] || pss['feeders'] || '6');
+                    const linemenStr = pss['Lineman'] || pss['lineman'] || '';
+                    const helpersStr = pss['Helper'] || pss['helper'] || '';
+
+                    log(`🏢 Processing ${pssName}...`, 'info');
+
+                    // Parse personnel names
+                    const linemen = linemenStr.split(',').map(n => n.trim()).filter(n => n);
+                    const helpers = helpersStr.split(',').map(n => n.trim()).filter(n => n);
+                    const allNames = [...linemen, ...helpers];
+
+                    // Create PSS Station
+                    const pssRef = await db.collection('pss_stations').add({
+                        name: pssName,
+                        code: pssName.substring(0, 3).toUpperCase(),
+                        voltage: '33/11 kV',
+                        feeders: feeders,
+                        location: pssName.replace('_PSS', '').replace('_', ' '),
+                        linemen: linemen,
+                        helpers: helpers,
+                        isActive: true,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    totalPSS++;
+                    log(`✅ PSS Station created: ${pssName} (${feeders} feeders)`, 'success');
+
+                    // Create Staff Users for this PSS
+                    for (let j = 0; j < allNames.length; j++) {
+                        const personnelName = allNames[j];
+                        const staffPhone = generatePhoneNumber(9100000000 + (i * 100) + j);
+                        const role = linemen.includes(personnelName) ? 'lineman' : 'helper';
+
+                        await db.collection('users').doc(staffPhone).set({
+                            phone: staffPhone,
+                            name: personnelName,
+                            role: 'staff',
+                            staffType: role,
+                            pssStation: pssName,
+                            names: allNames, // All personnel at this PSS
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            isActive: true
+                        });
+                        totalUsers++;
+                        totalStaff++;
+                        log(`   ✅ Staff user created: ${personnelName} (${staffPhone}) - ${role}`, 'success');
+                    }
+
+                    progress += progressPerPSS;
+                    updateProgress(Math.round(progress), `${i + 1}/${pssData.length} PSS Processed`);
+                }
+
+                // 3. Create sample data entry
+                log('📊 Creating sample data entry...', 'info');
+                const today = new Date();
+                const dateStr = today.toISOString().split('T')[0];
+                
+                await db.collection('daily_entries').add({
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                    date: dateStr,
+                    pssStation: pssData[0]['PSS Name'],
+                    personnelName: adminName,
+                    submittedBy: adminPhone,
+                    submittedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    
+                    // Sample data for all 127 columns
+                    ic1_33kv_voltage_r: 33.5, ic1_33kv_voltage_y: 33.4, ic1_33kv_voltage_b: 33.6,
+                    ic1_33kv_amp_r: 125.5, ic1_33kv_amp_y: 130.2, ic1_33kv_amp_b: 128.8,
+                    ic1_33kv_mw: 8.5, ic1_33kv_mvar: 2.3,
+                    
+                    ic2_33kv_voltage_r: 33.3, ic2_33kv_voltage_y: 33.5, ic2_33kv_voltage_b: 33.4,
+                    ic2_33kv_amp_r: 115.3, ic2_33kv_amp_y: 120.5, ic2_33kv_amp_b: 118.2,
+                    ic2_33kv_mw: 7.8, ic2_33kv_mvar: 2.1,
+                    
+                    ptr1_33kv_voltage_r: 33.2, ptr1_33kv_voltage_y: 33.4, ptr1_33kv_voltage_b: 33.3,
+                    ptr1_33kv_amp_r: 95.5, ptr1_33kv_amp_y: 98.2, ptr1_33kv_amp_b: 96.8,
+                    ptr1_33kv_mw: 6.5, ptr1_33kv_mvar: 1.8,
+                    
+                    ptr2_33kv_voltage_r: 33.4, ptr2_33kv_voltage_y: 33.3, ptr2_33kv_voltage_b: 33.5,
+                    ptr2_33kv_amp_r: 88.3, ptr2_33kv_amp_y: 90.5, ptr2_33kv_amp_b: 89.2,
+                    ptr2_33kv_mw: 6.0, ptr2_33kv_mvar: 1.6,
+                    
+                    ptr1_11kv_voltage_r: 11.2, ptr1_11kv_voltage_y: 11.1, ptr1_11kv_voltage_b: 11.3,
+                    ptr1_11kv_amp_r: 145.5, ptr1_11kv_amp_y: 148.2, ptr1_11kv_amp_b: 146.8,
+                    ptr1_11kv_mw: 2.8, ptr1_11kv_mvar: 0.8,
+                    
+                    ptr2_11kv_voltage_r: 11.1, ptr2_11kv_voltage_y: 11.2, ptr2_11kv_voltage_b: 11.1,
+                    ptr2_11kv_amp_r: 138.3, ptr2_11kv_amp_y: 140.5, ptr2_11kv_amp_b: 139.2,
+                    ptr2_11kv_mw: 2.6, ptr2_11kv_mvar: 0.7,
+                    
+                    feeder1_voltage_r: 11.0, feeder1_voltage_y: 11.1, feeder1_voltage_b: 11.0,
+                    feeder1_amp_r: 45.5, feeder1_amp_y: 48.2, feeder1_amp_b: 46.8,
+                    feeder1_mw: 0.9, feeder1_mvar: 0.3,
+                    
+                    feeder2_voltage_r: 11.1, feeder2_voltage_y: 11.0, feeder2_voltage_b: 11.1,
+                    feeder2_amp_r: 52.3, feeder2_amp_y: 54.5, feeder2_amp_b: 53.2,
+                    feeder2_mw: 1.0, feeder2_mvar: 0.3,
+                    
+                    feeder3_voltage_r: 11.0, feeder3_voltage_y: 11.1, feeder3_voltage_b: 11.0,
+                    feeder3_amp_r: 38.5, feeder3_amp_y: 40.2, feeder3_amp_b: 39.8,
+                    feeder3_mw: 0.8, feeder3_mvar: 0.2,
+                    
+                    feeder4_voltage_r: 11.1, feeder4_voltage_y: 11.0, feeder4_voltage_b: 11.1,
+                    feeder4_amp_r: 42.3, feeder4_amp_y: 44.5, feeder4_amp_b: 43.2,
+                    feeder4_mw: 0.9, feeder4_mvar: 0.2,
+                    
+                    feeder5_voltage_r: 11.0, feeder5_voltage_y: 11.1, feeder5_voltage_b: 11.0,
+                    feeder5_amp_r: 35.5, feeder5_amp_y: 37.2, feeder5_amp_b: 36.8,
+                    feeder5_mw: 0.7, feeder5_mvar: 0.2,
+                    
+                    feeder6_voltage_r: 11.1, feeder6_voltage_y: 11.0, feeder6_voltage_b: 11.1,
+                    feeder6_amp_r: 48.3, feeder6_amp_y: 50.5, feeder6_amp_b: 49.2,
+                    feeder6_mw: 1.0, feeder6_mvar: 0.3,
+                    
+                    station_transformer_voltage_r: 0.415, station_transformer_voltage_y: 0.415, station_transformer_voltage_b: 0.415,
+                    station_transformer_amp_r: 25.5, station_transformer_amp_y: 26.2, station_transformer_amp_b: 25.8,
+                    station_transformer_mw: 0.018, station_transformer_mvar: 0.006,
+                    
+                    charger_voltage_r: 220.0, charger_voltage_y: 220.0, charger_voltage_b: 220.0,
+                    charger_amp_r: 15.5, charger_amp_y: 15.2, charger_amp_b: 15.8,
+                    charger_mw: 0.010, charger_mvar: 0.003,
+                    
+                    isEditable: true,
+                    editedAt: null
+                });
+                log('✅ Sample data entry created', 'success');
+                updateProgress(90, 'Sample Data Created');
+
+                // 4. Create admin log
+                await db.collection('admin_logs').add({
+                    action: 'database_initialized',
+                    performedBy: adminPhone,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                    details: {
+                        adminName: adminName,
+                        adminPhone: adminPhone,
+                        pssStationsCount: totalPSS,
+                        totalUsers: totalUsers,
+                        staffMembers: totalStaff
+                    }
+                });
+                log('✅ Admin logs collection created', 'success');
+                updateProgress(100, 'Complete!');
+
+                updateStats();
+
+                log('', 'info');
+                log('🎉 DATA UPLOAD COMPLETE!', 'success');
+                log('', 'info');
+                log('📊 SUMMARY:', 'info');
+                log(`   • Total Users: ${totalUsers}`, 'success');
+                log(`   • PSS Stations: ${totalPSS}`, 'success');
+                log(`   • Staff Members: ${totalStaff}`, 'success');
+                log(`   • Admin: ${adminName} (${adminPhone})`, 'success');
+                log('', 'info');
+                log('🚀 NEXT STEPS:', 'info');
+                log('1. Deploy: firebase deploy', 'warning');
+                log('2. Open your deployed URL', 'warning');
+                log(`3. Login with: ${adminPhone}`, 'warning');
+                log('4. Test all features!', 'warning');
+
+                uploadBtn.textContent = '✅ Upload Complete!';
+                uploadBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+
+            } catch (error) {
+                log(`❌ ERROR: ${error.message}`, 'error');
+                console.error('Upload error:', error);
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = '🔄 Try Again';
+                alert('❌ Upload failed: ' + error.message);
+            }
+        }
+
+        // Load sample data on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            log('✅ Page loaded - Ready to upload data', 'success');
+            log('💡 Paste your CSV data or click "Load Sample Data"', 'info');
+        });
+    </script>
+</body>
+</html>

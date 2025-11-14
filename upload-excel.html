@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload Excel Data to Firestore</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 1000px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 15px;
+        }
+        .section {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 25px;
+        }
+        .section h2 {
+            color: #333;
+            font-size: 20px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: white;
+        }
+        .upload-area:hover {
+            background: #f8f9fa;
+            border-color: #764ba2;
+        }
+        .upload-area.dragover {
+            background: #e8eaf6;
+            border-color: #667eea;
+            transform: scale(1.02);
+        }
+        .upload-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        .upload-text {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        .upload-subtext {
+            font-size: 14px;
+            color: #666;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+            transition: transform 0.2s;
+        }
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+        }
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .file-info {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+        }
+        .file-info.active {
+            display: block;
+        }
+        .file-name {
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        .preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .preview-card {
+            background: linear-gradient(135deg, #667eea15, #764ba215);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border: 2px solid #667eea30;
+        }
+        .preview-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        .preview-label {
+            color: #666;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        .progress {
+            margin-top: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            height: 30px;
+            overflow: hidden;
+            display: none;
+        }
+        .progress.active {
+            display: block;
+        }
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .log {
+            background: #1e293b;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            max-height: 500px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            display: none;
+        }
+        .log.active {
+            display: block;
+        }
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 8px 12px;
+            border-radius: 5px;
+            border-left: 4px solid;
+        }
+        .log-entry.success {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border-left-color: #10b981;
+        }
+        .log-entry.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border-left-color: #ef4444;
+        }
+        .log-entry.info {
+            background: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+            border-left-color: #3b82f6;
+        }
+        .log-entry.warning {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+            border-left-color: #f59e0b;
+        }
+        .instructions {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 20px;
+            margin-bottom: 25px;
+            border-radius: 8px;
+        }
+        .instructions h3 {
+            color: #856404;
+            margin-bottom: 12px;
+            font-size: 18px;
+        }
+        .instructions ul {
+            color: #856404;
+            font-size: 14px;
+            line-height: 1.8;
+            margin-left: 20px;
+        }
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+            display: none;
+        }
+        .stats.active {
+            display: grid;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #667eea15, #764ba215);
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            border: 2px solid #667eea30;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+            font-weight: 500;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Upload Excel Data to Firestore</h1>
+        <p class="subtitle">Upload your Excel file with PSS admin and station data</p>
+
+        <div class="instructions">
+            <h3>📋 Your Excel Should Have 2 Sheets:</h3>
+            <ul>
+                <li><strong>Sheet 1:</strong> PSS/Admin Names with phone numbers</li>
+                <li><strong>Sheet 2:</strong> PSS details with feeders, linemen, and helpers</li>
+                <li>All data will be automatically uploaded to Firestore</li>
+                <li>Staff phone numbers will be auto-generated</li>
+            </ul>
+        </div>
+
+        <!-- Upload Area -->
+        <div class="section">
+            <h2>📁 Upload Your Excel File</h2>
+            <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+                <div class="upload-icon">📊</div>
+                <div class="upload-text">Click to browse or drag & drop</div>
+                <div class="upload-subtext">Excel files (.xlsx, .xls)</div>
+            </div>
+            <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="handleFileSelect(event)">
+            
+            <!-- File Info -->
+            <div class="file-info" id="fileInfo">
+                <div class="file-name" id="fileName"></div>
+                <div class="preview-grid" id="previewGrid"></div>
+            </div>
+        </div>
+
+        <!-- Upload Button -->
+        <button class="btn" id="uploadBtn" onclick="uploadToFirestore()" disabled>
+            🚀 Upload to Firestore
+        </button>
+
+        <!-- Progress -->
+        <div class="progress" id="progress">
+            <div class="progress-bar" id="progressBar">0%</div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats" id="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="statAdmins">0</div>
+                <div class="stat-label">Admins</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statPSS">0</div>
+                <div class="stat-label">PSS Stations</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statStaff">0</div>
+                <div class="stat-label">Staff Users</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="statTotal">0</div>
+                <div class="stat-label">Total Users</div>
+            </div>
+        </div>
+
+        <!-- Log -->
+        <div class="log" id="log"></div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <!-- SheetJS for Excel parsing -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
+    <!-- Firebase Config -->
+    <script src="public/js/firebase-config.js"></script>
+
+    <script>
+        let excelData = null;
+        let adminData = [];
+        let pssData = [];
+
+        const logDiv = document.getElementById('log');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const progressDiv = document.getElementById('progress');
+        const progressBar = document.getElementById('progressBar');
+        const statsDiv = document.getElementById('stats');
+        const fileInfo = document.getElementById('fileInfo');
+        const uploadArea = document.getElementById('uploadArea');
+
+        function log(message, type = 'info') {
+            logDiv.classList.add('active');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.innerHTML = `<strong>${timestamp}</strong> ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateProgress(percent, text) {
+            progressDiv.classList.add('active');
+            progressBar.style.width = percent + '%';
+            progressBar.textContent = text || (percent + '%');
+        }
+
+        function updateStats(admins, pss, staff) {
+            statsDiv.classList.add('active');
+            document.getElementById('statAdmins').textContent = admins;
+            document.getElementById('statPSS').textContent = pss;
+            document.getElementById('statStaff').textContent = staff;
+            document.getElementById('statTotal').textContent = admins + staff;
+        }
+
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) {
+                readExcelFile(file);
+            }
+        });
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                readExcelFile(file);
+            }
+        }
+
+        function readExcelFile(file) {
+            log('📖 Reading Excel file: ' + file.name, 'info');
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    log('✅ Excel file loaded successfully', 'success');
+                    log(`📋 Found ${workbook.SheetNames.length} sheets: ${workbook.SheetNames.join(', ')}`, 'info');
+                    
+                    // Read Sheet 1: Admin/PSS Names
+                    const sheet1Name = workbook.SheetNames[0];
+                    const sheet1 = workbook.Sheets[sheet1Name];
+                    adminData = XLSX.utils.sheet_to_json(sheet1);
+                    log(`✅ Sheet 1 (${sheet1Name}): ${adminData.length} admin users`, 'success');
+                    
+                    // Read Sheet 2: PSS Details
+                    const sheet2Name = workbook.SheetNames[1];
+                    const sheet2 = workbook.Sheets[sheet2Name];
+                    pssData = XLSX.utils.sheet_to_json(sheet2);
+                    log(`✅ Sheet 2 (${sheet2Name}): ${pssData.length} PSS stations`, 'success');
+                    
+                    // Display preview
+                    displayPreview(file.name);
+                    
+                    // Enable upload button
+                    uploadBtn.disabled = false;
+                    uploadBtn.textContent = `🚀 Upload ${adminData.length} Admins + ${pssData.length} PSS Stations`;
+                    
+                } catch (error) {
+                    log('❌ Error reading Excel: ' + error.message, 'error');
+                    console.error(error);
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function displayPreview(fileName) {
+            fileInfo.classList.add('active');
+            document.getElementById('fileName').textContent = '📄 ' + fileName;
+            
+            const previewGrid = document.getElementById('previewGrid');
+            previewGrid.innerHTML = `
+                <div class="preview-card">
+                    <div class="preview-value">${adminData.length}</div>
+                    <div class="preview-label">Admin Users</div>
+                </div>
+                <div class="preview-card">
+                    <div class="preview-value">${pssData.length}</div>
+                    <div class="preview-label">PSS Stations</div>
+                </div>
+                <div class="preview-card">
+                    <div class="preview-value">${pssData.reduce((sum, pss) => {
+                        const linemen = (pss.LINEMAN || pss.Lineman || '').split(',').filter(n => n.trim()).length;
+                        const helpers = (pss.HELPER || pss.Helper || '').split(',').filter(n => n.trim()).length;
+                        return sum + linemen + helpers;
+                    }, 0)}</div>
+                    <div class="preview-label">Est. Staff</div>
+                </div>
+            `;
+        }
+
+        function generatePhoneNumber(base, index) {
+            return String(base + index);
+        }
+
+        async function uploadToFirestore() {
+            if (!adminData.length || !pssData.length) {
+                alert('❌ Please upload an Excel file first');
+                return;
+            }
+
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = '⏳ Uploading...';
+            logDiv.innerHTML = '';
+
+            let totalAdmins = 0;
+            let totalPSSStations = 0;
+            let totalStaffUsers = 0;
+
+            try {
+                log('🔥 Starting upload to Firestore...', 'info');
+                updateProgress(5, 'Initializing...');
+
+                // 1. Upload Admin Users
+                log('👤 Uploading admin users...', 'info');
+                const progress1 = 30 / adminData.length;
+                
+                for (let i = 0; i < adminData.length; i++) {
+                    const admin = adminData[i];
+                    const adminName = admin['pss/admin name'] || admin['PSS/Admin Name'] || admin['name'] || `Admin_${i+1}`;
+                    const adminPhone = String(admin['phone number'] || admin['Phone Number'] || admin['phone'] || generatePhoneNumber(9876543210, i));
+                    
+                    try {
+                        await db.collection('users').doc(adminPhone).set({
+                            phone: adminPhone,
+                            name: adminName,
+                            role: 'admin',
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                            isActive: true
+                        }, { merge: true });
+                        
+                        totalAdmins++;
+                        log(`✅ Admin: ${adminName} (${adminPhone})`, 'success');
+                    } catch (err) {
+                        log(`⚠️ Admin failed: ${adminName} - ${err.message}`, 'warning');
+                    }
+                    updateProgress(5 + Math.round(progress1 * (i + 1)), `Admin ${i+1}/${adminData.length}`);
+                }
+
+                // 2. Upload PSS Stations and Staff
+                log('🏢 Uploading PSS stations and staff...', 'info');
+                const progress2 = 60 / pssData.length;
+                
+                for (let i = 0; i < pssData.length; i++) {
+                    const pss = pssData[i];
+                    const pssName = pss['PSS NAME'] || pss['PSS Name'] || pss['pss name'] || `PSS_${i+1}`;
+                    const feeders = parseInt(pss['FEEDERS'] || pss['Feeders'] || pss['feeders'] || 6);
+                    const linemenStr = pss['LINEMAN'] || pss['Lineman'] || pss['lineman'] || '';
+                    const helpersStr = pss['HELPER'] || pss['Helper'] || pss['helper'] || '';
+
+                    log(`🏢 Processing ${pssName}...`, 'info');
+
+                    // Parse personnel
+                    const linemen = linemenStr.split(',').map(n => n.trim()).filter(n => n);
+                    const helpers = helpersStr.split(',').map(n => n.trim()).filter(n => n);
+                    const allNames = [...linemen, ...helpers];
+
+                    // Create PSS Station
+                    try {
+                        await db.collection('pss_stations').add({
+                            name: pssName,
+                            code: pssName.substring(0, 3).toUpperCase(),
+                            voltage: '33/11 kV',
+                            feeders: feeders,
+                            location: pssName.replace('_', ' '),
+                            linemen: linemen,
+                            helpers: helpers,
+                            isActive: true,
+                            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        });
+                        
+                        totalPSSStations++;
+                        log(`✅ PSS: ${pssName} (${feeders} feeders)`, 'success');
+                    } catch (err) {
+                        log(`⚠️ PSS failed: ${pssName} - ${err.message}`, 'warning');
+                    }
+
+                    // Create Staff Users
+                    for (let j = 0; j < allNames.length; j++) {
+                        const personnelName = allNames[j];
+                        const staffPhone = generatePhoneNumber(9100000000 + (i * 100) + j, 0);
+                        const staffType = linemen.includes(personnelName) ? 'lineman' : 'helper';
+
+                        try {
+                            await db.collection('users').doc(staffPhone).set({
+                                phone: staffPhone,
+                                name: personnelName,
+                                role: 'staff',
+                                staffType: staffType,
+                                pssStation: pssName,
+                                names: allNames,
+                                createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                                isActive: true
+                            }, { merge: true });
+                            
+                            totalStaffUsers++;
+                            log(`   ✅ Staff: ${personnelName} (${staffPhone}) - ${staffType}`, 'success');
+                        } catch (err) {
+                            log(`   ⚠️ Staff failed: ${personnelName} - ${err.message}`, 'warning');
+                        }
+                    }
+
+                    updateProgress(35 + Math.round(progress2 * (i + 1)), `PSS ${i+1}/${pssData.length}`);
+                }
+
+                // 3. Create sample data entry
+                log('📊 Creating sample data entry...', 'info');
+                const today = new Date().toISOString().split('T')[0];
+                const firstAdmin = adminData[0];
+                const firstAdminName = firstAdmin['pss/admin name'] || firstAdmin['PSS/Admin Name'] || 'Admin';
+                const firstAdminPhone = String(firstAdmin['phone number'] || firstAdmin['Phone Number'] || '9876543210');
+                const firstPSSName = pssData[0]['PSS NAME'] || pssData[0]['PSS Name'] || 'KUNDUKELA';
+                
+                await db.collection('daily_entries').add({
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                    date: today,
+                    pssStation: firstPSSName,
+                    personnelName: firstAdminName,
+                    submittedBy: firstAdminPhone,
+                    submittedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    
+                    // Complete 127-column sample data
+                    ic1_33kv_voltage_r: 33.5, ic1_33kv_voltage_y: 33.4, ic1_33kv_voltage_b: 33.6,
+                    ic1_33kv_amp_r: 125.5, ic1_33kv_amp_y: 130.2, ic1_33kv_amp_b: 128.8,
+                    ic1_33kv_mw: 8.5, ic1_33kv_mvar: 2.3,
+                    ic2_33kv_voltage_r: 33.3, ic2_33kv_voltage_y: 33.5, ic2_33kv_voltage_b: 33.4,
+                    ic2_33kv_amp_r: 115.3, ic2_33kv_amp_y: 120.5, ic2_33kv_amp_b: 118.2,
+                    ic2_33kv_mw: 7.8, ic2_33kv_mvar: 2.1,
+                    ptr1_33kv_voltage_r: 33.2, ptr1_33kv_voltage_y: 33.4, ptr1_33kv_voltage_b: 33.3,
+                    ptr1_33kv_amp_r: 95.5, ptr1_33kv_amp_y: 98.2, ptr1_33kv_amp_b: 96.8,
+                    ptr1_33kv_mw: 6.5, ptr1_33kv_mvar: 1.8,
+                    ptr2_33kv_voltage_r: 33.4, ptr2_33kv_voltage_y: 33.3, ptr2_33kv_voltage_b: 33.5,
+                    ptr2_33kv_amp_r: 88.3, ptr2_33kv_amp_y: 90.5, ptr2_33kv_amp_b: 89.2,
+                    ptr2_33kv_mw: 6.0, ptr2_33kv_mvar: 1.6,
+                    ptr1_11kv_voltage_r: 11.2, ptr1_11kv_voltage_y: 11.1, ptr1_11kv_voltage_b: 11.3,
+                    ptr1_11kv_amp_r: 145.5, ptr1_11kv_amp_y: 148.2, ptr1_11kv_amp_b: 146.8,
+                    ptr1_11kv_mw: 2.8, ptr1_11kv_mvar: 0.8,
+                    ptr2_11kv_voltage_r: 11.1, ptr2_11kv_voltage_y: 11.2, ptr2_11kv_voltage_b: 11.1,
+                    ptr2_11kv_amp_r: 138.3, ptr2_11kv_amp_y: 140.5, ptr2_11kv_amp_b: 139.2,
+                    ptr2_11kv_mw: 2.6, ptr2_11kv_mvar: 0.7,
+                    feeder1_voltage_r: 11.0, feeder1_voltage_y: 11.1, feeder1_voltage_b: 11.0,
+                    feeder1_amp_r: 45.5, feeder1_amp_y: 48.2, feeder1_amp_b: 46.8,
+                    feeder1_mw: 0.9, feeder1_mvar: 0.3,
+                    feeder2_voltage_r: 11.1, feeder2_voltage_y: 11.0, feeder2_voltage_b: 11.1,
+                    feeder2_amp_r: 52.3, feeder2_amp_y: 54.5, feeder2_amp_b: 53.2,
+                    feeder2_mw: 1.0, feeder2_mvar: 0.3,
+                    feeder3_voltage_r: 11.0, feeder3_voltage_y: 11.1, feeder3_voltage_b: 11.0,
+                    feeder3_amp_r: 38.5, feeder3_amp_y: 40.2, feeder3_amp_b: 39.8,
+                    feeder3_mw: 0.8, feeder3_mvar: 0.2,
+                    feeder4_voltage_r: 11.1, feeder4_voltage_y: 11.0, feeder4_voltage_b: 11.1,
+                    feeder4_amp_r: 42.3, feeder4_amp_y: 44.5, feeder4_amp_b: 43.2,
+                    feeder4_mw: 0.9, feeder4_mvar: 0.2,
+                    feeder5_voltage_r: 11.0, feeder5_voltage_y: 11.1, feeder5_voltage_b: 11.0,
+                    feeder5_amp_r: 35.5, feeder5_amp_y: 37.2, feeder5_amp_b: 36.8,
+                    feeder5_mw: 0.7, feeder5_mvar: 0.2,
+                    feeder6_voltage_r: 11.1, feeder6_voltage_y: 11.0, feeder6_voltage_b: 11.1,
+                    feeder6_amp_r: 48.3, feeder6_amp_y: 50.5, feeder6_amp_b: 49.2,
+                    feeder6_mw: 1.0, feeder6_mvar: 0.3,
+                    station_transformer_voltage_r: 0.415, station_transformer_voltage_y: 0.415, station_transformer_voltage_b: 0.415,
+                    station_transformer_amp_r: 25.5, station_transformer_amp_y: 26.2, station_transformer_amp_b: 25.8,
+                    station_transformer_mw: 0.018, station_transformer_mvar: 0.006,
+                    charger_voltage_r: 220.0, charger_voltage_y: 220.0, charger_voltage_b: 220.0,
+                    charger_amp_r: 15.5, charger_amp_y: 15.2, charger_amp_b: 15.8,
+                    charger_mw: 0.010, charger_mvar: 0.003,
+                    isEditable: true
+                });
+                log('✅ Sample data entry created', 'success');
+                updateProgress(95, 'Creating logs...');
+
+                // 4. Create admin log
+                await db.collection('admin_logs').add({
+                    action: 'excel_data_imported',
+                    performedBy: firstAdminPhone,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                    details: {
+                        adminCount: totalAdmins,
+                        pssCount: totalPSSStations,
+                        staffCount: totalStaffUsers,
+                        totalUsers: totalAdmins + totalStaffUsers
+                    }
+                });
+                updateProgress(100, 'Complete!');
+
+                updateStats(totalAdmins, totalPSSStations, totalStaffUsers);
+
+                log('', 'info');
+                log('🎉 UPLOAD COMPLETE!', 'success');
+                log('', 'info');
+                log('📊 SUMMARY:', 'info');
+                log(`   • Admin Users: ${totalAdmins}`, 'success');
+                log(`   • PSS Stations: ${totalPSSStations}`, 'success');
+                log(`   • Staff Users: ${totalStaffUsers}`, 'success');
+                log(`   • Total Users: ${totalAdmins + totalStaffUsers}`, 'success');
+                log('', 'info');
+                log('🚀 NEXT STEPS:', 'warning');
+                log('1. Run: firebase deploy', 'warning');
+                log('2. Open your deployed URL', 'warning');
+                log(`3. Login with any admin phone number (e.g., ${adminData[0]['phone number']})`, 'warning');
+                log('4. Test all features!', 'warning');
+
+                uploadBtn.textContent = '✅ Upload Complete!';
+                uploadBtn.style.background = 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
+
+            } catch (error) {
+                log(`❌ ERROR: ${error.message}`, 'error');
+                console.error('Upload error:', error);
+                uploadBtn.disabled = false;
+                uploadBtn.textContent = '🔄 Try Again';
+                alert('❌ Upload failed: ' + error.message);
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            log('✅ Ready to upload Excel data', 'success');
+            log('📊 Upload your Excel file with 2 sheets (Admin users + PSS details)', 'info');
+        });
+    </script>
+</body>
+</html>

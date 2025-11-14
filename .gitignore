@@ -1,0 +1,40 @@
+# Firebase
+.firebase/
+.firebaserc
+firebase-debug.log
+firestore-debug.log
+
+# Sensitive files
+serviceAccountKey.json
+**/serviceAccountKey.json
+
+# Node modules (if you add them later)
+node_modules/
+package-lock.json
+
+# Environment files
+.env
+.env.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.log
+*.tmp
+*.temp
+
+# Backup files
+*.backup
+*.backup-*
+*.bak
+
+# Text output files
+firestore_check.txt

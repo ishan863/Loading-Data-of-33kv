@@ -1,0 +1,1942 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#8b5cf6">
+    <title>Loading Data Management App - Raja Patel</title>
+    <link rel="stylesheet" href="css/loading.css?v=8">
+    <link rel="stylesheet" href="css/login.css?v=8">
+    <link rel="stylesheet" href="css/admin.css?v=10">
+    <link rel="stylesheet" href="css/user.css?v=16">
+    <link rel="stylesheet" href="css/form.css?v=11">
+    <link rel="stylesheet" href="css/custom-select.css?v=4">
+    <link rel="stylesheet" href="css/dashboard-analytics.css?v=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        /* Quick fix for screen display */
+        .screen { display: none; }
+        .screen.active { display: block !important; }
+        .user-main-content, .admin-main-content { padding: 2rem; }
+        .stats-grid, .admin-stats-grid { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); 
+            gap: 1.5rem; 
+            margin-bottom: 2rem;
+        }
+        .stat-card, .admin-stat-card { 
+            background: rgba(255,255,255,0.1); 
+            backdrop-filter: blur(10px);
+            padding: 1.5rem; 
+            border-radius: 16px; 
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+        .stat-icon { 
+            width: 60px; 
+            height: 60px; 
+            border-radius: 12px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 24px;
+        }
+        .stat-info h3, .admin-stat-card h3 { 
+            font-size: 32px; 
+            font-weight: 700; 
+            color: white; 
+            margin: 0 0 0.25rem 0;
+        }
+        .stat-info p, .admin-stat-card p { 
+            font-size: 14px; 
+            color: rgba(255,255,255,0.7); 
+            margin: 0;
+        }
+        .dashboard-section, .admin-tab-content { 
+            background: rgba(255,255,255,0.08); 
+            backdrop-filter: blur(10px);
+            padding: 2rem; 
+            border-radius: 16px;
+        }
+        .dashboard-section h2, .admin-tab-content h2 { 
+            color: white; 
+            margin: 0 0 1.5rem 0;
+        }
+        .btn-logout, .btn-new-entry { 
+            padding: 0.75rem 1.5rem; 
+            border: none; 
+            border-radius: 12px; 
+            font-weight: 600; 
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .btn-logout { 
+            background: rgba(255,255,255,0.15); 
+            color: white;
+        }
+        .btn-new-entry { 
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+        .admin-tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+        }
+        .admin-tab {
+            padding: 0.75rem 1.5rem;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            border-radius: 12px;
+            color: rgba(255,255,255,0.7);
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        .admin-tab.active {
+            background: rgba(255,255,255,0.2);
+            color: white;
+        }
+        .admin-tab-content {
+            display: none;
+        }
+        .admin-tab-content.active {
+            display: block;
+        }
+        
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+        }
+        .modal-container {
+            background: linear-gradient(135deg, rgba(255,255,255,0.15), rgba(255,255,255,0.05));
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            max-width: 800px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 2rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .modal-header h2 {
+            color: white;
+            margin: 0;
+            font-size: 24px;
+        }
+        .modal-close {
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .modal-close:hover {
+            background: rgba(255,255,255,0.2);
+            transform: rotate(90deg);
+        }
+        .modal-body {
+            padding: 2rem;
+        }
+        .form-step {
+            display: none;
+        }
+        .form-step.active {
+            display: block;
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        .form-group label {
+            display: block;
+            color: white;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        .form-control {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: rgba(255,255,255,0.1);
+            border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 12px;
+            color: white;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        .form-control:focus {
+            outline: none;
+            border-color: rgba(255,255,255,0.5);
+            background: rgba(255,255,255,0.15);
+        }
+        .form-control-readonly {
+            background: rgba(255,255,255,0.05);
+            cursor: not-allowed;
+        }
+        .btn-primary, .btn-secondary, .btn-back {
+            padding: 0.75rem 2rem;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            width: 100%;
+            margin-top: 1rem;
+        }
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            color: white;
+        }
+        .btn-back {
+            background: rgba(255,255,255,0.15);
+            color: white;
+            padding: 0.5rem 1rem;
+        }
+        .form-step-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+        .selected-staff-info {
+            background: rgba(255,255,255,0.1);
+            padding: 1rem;
+            border-radius: 12px;
+        }
+        .selected-staff-info p {
+            color: white;
+            margin: 0.25rem 0;
+            font-size: 14px;
+        }
+        
+        /* Wizard Stepper Styles */
+        .stepper-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 30px 20px;
+            background: rgba(0,0,0,0.3);
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .stepper-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            opacity: 0.5;
+            transition: all 0.3s ease;
+        }
+        .stepper-step.active {
+            opacity: 1;
+        }
+        .stepper-step.completed {
+            opacity: 0.8;
+        }
+        .stepper-circle {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.1);
+            border: 2px solid rgba(255,255,255,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        .stepper-step.active .stepper-circle {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            border-color: #3b82f6;
+            box-shadow: 0 0 20px rgba(59,130,246,0.5);
+            transform: scale(1.1);
+        }
+        .stepper-step.completed .stepper-circle {
+            background: linear-gradient(135deg, #10b981, #059669);
+            border-color: #10b981;
+        }
+        .stepper-label {
+            margin-top: 8px;
+            color: rgba(255,255,255,0.6);
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .stepper-step.active .stepper-label {
+            color: #60a5fa;
+        }
+        .stepper-step.completed .stepper-label {
+            color: #34d399;
+        }
+        .stepper-line {
+            width: 60px;
+            height: 2px;
+            background: rgba(255,255,255,0.2);
+            margin: 0 10px;
+            position: relative;
+            bottom: 20px;
+        }
+        
+        /* Wizard Step Styles */
+        .wizard-step {
+            display: none;
+            animation: fadeIn 0.4s ease-in-out;
+        }
+        .wizard-step.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateX(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        @keyframes pulseGlow {
+            0%, 100% {
+                box-shadow: 0 0 10px rgba(96, 165, 250, 0.3);
+            }
+            50% {
+                box-shadow: 0 0 20px rgba(96, 165, 250, 0.6);
+            }
+        }
+        
+        .stat-card.animated-equipment {
+            animation: pulseGlow 3s ease-in-out infinite;
+        }
+        
+        .feeders-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+        .feeder-input-group {
+            background: rgba(255,255,255,0.08);
+            padding: 1rem;
+            border-radius: 12px;
+        }
+        .feeder-input-group label {
+            color: rgba(255,255,255,0.9);
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+        .form-actions button {
+            flex: 1;
+        }
+        .form-note {
+            color: rgba(255,255,255,0.7);
+            font-size: 14px;
+            margin-bottom: 1rem;
+        }
+        
+        /* Staff Cards Styling */
+        .staff-cards-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin: 1.5rem 0;
+        }
+        .staff-column h4 {
+            color: white;
+            margin: 0 0 1rem 0;
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .staff-cards {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        .staff-card {
+            background: rgba(255,255,255,0.08);
+            border: 2px solid rgba(255,255,255,0.15);
+            padding: 1rem 1.25rem;
+            border-radius: 12px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .staff-card:hover {
+            background: rgba(255,255,255,0.15);
+            border-color: rgba(255,255,255,0.3);
+            transform: translateX(5px);
+        }
+        .staff-card.selected {
+            background: linear-gradient(135deg, #10b981, #059669);
+            border-color: #10b981;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+        }
+        .staff-card-name {
+            font-weight: 600;
+            font-size: 15px;
+        }
+        .staff-card-check {
+            display: none;
+            font-size: 20px;
+        }
+        .staff-card.selected .staff-card-check {
+            display: block;
+        }
+        
+        @media (max-width: 768px) {
+            .staff-cards-container {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+        }
+        
+        /* Admin Features Styling */
+        .upload-section, .view-controls {
+            margin-bottom: 2rem;
+        }
+        .upload-card, .settings-card {
+            background: rgba(255,255,255,0.08);
+            padding: 2rem;
+            border-radius: 16px;
+            text-align: center;
+        }
+        .upload-card h3, .settings-card h3 {
+            color: white;
+            margin: 0 0 1rem 0;
+        }
+        .view-controls {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+        .filter-group {
+            flex: 1;
+            min-width: 200px;
+        }
+        .filter-group label {
+            color: white;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+        .data-table-container {
+            background: rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 1rem;
+            overflow-x: auto;
+        }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .data-table th {
+            background: rgba(255,255,255,0.1);
+            color: white;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+        }
+        .data-table td {
+            color: rgba(255,255,255,0.9);
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        .data-table tbody tr:hover {
+            background: rgba(255,255,255,0.05);
+        }
+        .analytics-grid, .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+        .analytics-card, .settings-card {
+            background: rgba(255,255,255,0.08);
+            padding: 1.5rem;
+            border-radius: 16px;
+        }
+        .analytics-card h3 {
+            color: white;
+            margin: 0 0 1rem 0;
+        }
+        .btn-action {
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 0 0.25rem;
+        }
+        .btn-action:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        
+        /* Excel View Styles */
+        #excelDataContainer {
+            background: rgba(255,255,255,0.08);
+            border-radius: 16px;
+            padding: 0;
+            overflow: auto;
+            max-height: 650px;
+        }
+        
+        #excelDataContainer::-webkit-scrollbar {
+            width: 12px;
+            height: 12px;
+        }
+        
+        #excelDataContainer::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.3);
+            border-radius: 6px;
+        }
+        
+        #excelDataContainer::-webkit-scrollbar-thumb {
+            background: rgba(102,126,234,0.6);
+            border-radius: 6px;
+            border: 2px solid rgba(0,0,0,0.3);
+        }
+        
+        #excelDataContainer::-webkit-scrollbar-thumb:hover {
+            background: rgba(102,126,234,0.8);
+        }
+        
+        #excelDataContainer::-webkit-scrollbar-corner {
+            background: rgba(0,0,0,0.3);
+        }
+        
+        #excelDataTable {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            min-width: 100%;
+        }
+        
+        #excelDataTable thead {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(30,41,59,0.98);
+        }
+        
+        #excelDataTable th {
+            padding: 0.8rem 0.5rem;
+            text-align: center;
+            font-weight: 700;
+            color: white;
+            border: 1px solid rgba(255,255,255,0.1);
+            white-space: nowrap;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        
+        #excelDataTable td {
+            padding: 0.6rem 0.5rem;
+            border: 1px solid rgba(255,255,255,0.05);
+            color: rgba(255,255,255,0.9);
+            white-space: nowrap;
+            text-align: center;
+        }
+        
+        #excelDataTable tbody tr:hover {
+            background: rgba(102,126,234,0.15);
+        }
+        
+        #excelDataTable tbody tr:nth-child(even) {
+            background: rgba(255,255,255,0.02);
+        }
+        
+        #excelDataTable tbody tr:nth-child(even):hover {
+            background: rgba(102,126,234,0.15);
+        }
+        
+        /* Sticky columns for Excel view */
+        .sticky-col {
+            position: sticky;
+            z-index: 50;
+            background: rgba(30,41,59,0.95);
+        }
+        
+        /* Scrollbar for feeders data column */
+        .data-table td > div {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(102,126,234,0.6) rgba(0,0,0,0.2);
+        }
+        
+        .data-table td > div::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .data-table td > div::-webkit-scrollbar-track {
+            background: rgba(0,0,0,0.2);
+            border-radius: 3px;
+        }
+        
+        .data-table td > div::-webkit-scrollbar-thumb {
+            background: rgba(102,126,234,0.6);
+            border-radius: 3px;
+        }
+        
+        .data-table td > div::-webkit-scrollbar-thumb:hover {
+            background: rgba(102,126,234,0.8);
+        }
+    </style>
+</head>
+<body>
+    
+    <!-- ==================== LOADING SCREEN ==================== -->
+    <div id="loadingScreen" class="loading-screen active">
+        <div class="loading-content">
+            <!-- Animated Logo -->
+            <div class="logo-container">
+                <div class="logo-circle">
+                    <svg viewBox="0 0 100 100" class="logo-svg">
+                        <circle cx="50" cy="50" r="45" class="logo-ring"/>
+                        <path d="M30,50 L45,65 L70,35" class="logo-check"/>
+                    </svg>
+                </div>
+                <div class="power-pulse"></div>
+            </div>
+
+            <!-- App Title -->
+            <h1 class="app-title">
+                <span class="title-line">Loading Data</span>
+                <span class="title-line">Management App</span>
+            </h1>
+
+            <!-- Subtitle -->
+            <p class="app-subtitle">PSS Power Station System</p>
+
+            <!-- Loading Animation -->
+            <div class="loading-bar-container">
+                <div class="loading-bar">
+                    <div class="loading-bar-fill"></div>
+                </div>
+                <p class="loading-text">Initializing system...</p>
+            </div>
+
+            <!-- Developer Credit -->
+            <div class="developer-credit">
+                <p>Developed by</p>
+                <h3>Raja Patel</h3>
+            </div>
+        </div>
+
+        <!-- Animated Background -->
+        <div class="loading-background">
+            <div class="grid-lines"></div>
+            <div class="floating-particles"></div>
+        </div>
+    </div>
+
+    <!-- ==================== LOGIN SCREEN ==================== -->
+    <div id="loginScreen" class="screen">
+        <div class="login-container">
+            <div class="login-card">
+                <!-- Logo -->
+                <div class="login-logo">
+                    <div class="logo-icon">⚡</div>
+                    <h2>PSS Data Collection</h2>
+                    <p>Loading Data Management System</p>
+                </div>
+
+                <!-- Login Form -->
+                <form id="loginForm" class="login-form">
+                    <div class="form-group">
+                        <label for="phoneNumber">
+                            <span class="label-icon">📱</span>
+                            Phone Number
+                        </label>
+                        <input 
+                            type="tel" 
+                            id="phoneNumber" 
+                            placeholder="Enter 10-digit number"
+                            maxlength="10"
+                            pattern="[0-9]{10}"
+                            required
+                        >
+                        <span class="input-hint">Enter registered phone number (no OTP required)</span>
+                    </div>
+
+                    <button type="submit" class="btn-login">
+                        <span>Login</span>
+                        <span class="btn-icon">→</span>
+                    </button>
+                </form>
+
+                <!-- Info -->
+                <div class="login-info">
+                    <p>ℹ️ Only registered PSS personnel can access</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Animated Background -->
+        <div class="auth-background">
+            <div class="shape shape-1"></div>
+            <div class="shape shape-2"></div>
+            <div class="shape shape-3"></div>
+        </div>
+    </div>
+
+    <!-- ==================== NAME SELECTION SCREEN (For Staff) ==================== -->
+    <div id="nameSelectionScreen" class="screen">
+        <div class="selection-container">
+            <div class="selection-card">
+                <h2>Select Your Name</h2>
+                <p class="welcome-text">Welcome! Please select your name to continue</p>
+
+                <div class="user-info">
+                    <p><strong>Phone:</strong> <span id="userPhone"></span></p>
+                    <p><strong>PSS Station:</strong> <span id="userStation"></span></p>
+                </div>
+
+                <div id="nameList" class="name-list">
+                    <!-- Names will be populated here -->
+                </div>
+
+                <button class="btn-back" onclick="logout()">← Back to Login</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== ADMIN DASHBOARD ==================== -->
+    <div id="adminDashboardScreen" class="screen">
+        <!-- Admin Header -->
+        <div class="admin-header">
+            <div class="admin-header-left">
+                <div class="admin-logo">⚡</div>
+                <div class="admin-title-section">
+                    <h1>Admin Dashboard</h1>
+                    <p>PSS Loading Data Management System</p>
+                </div>
+            </div>
+            <div class="admin-header-right">
+                <button class="btn-logout" onclick="logout()">
+                    <span>Logout</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Admin Content -->
+        <div class="admin-main-content">
+            <!-- Navigation Tabs -->
+            <div class="admin-tabs">
+                <button class="admin-tab active" data-tab="overview">📊 Overview</button>
+                <button class="admin-tab" data-tab="upload">📤 Upload Data</button>
+                <button class="admin-tab" data-tab="view">👁️ View All</button>
+                <button class="admin-tab" data-tab="analytics">📈 Analytics</button>
+                <button class="admin-tab" data-tab="ai-assistant">🤖 AI Assistant</button>
+                <button class="admin-tab" data-tab="settings">⚙️ Settings</button>
+            </div>
+
+            <!-- Tab Content -->
+            <div id="overviewTab" class="admin-tab-content active">
+                <h2>📊 System Overview</h2>
+                <div class="admin-stats-grid">
+                    <div class="admin-stat-card">
+                        <h3 id="totalUsersCount">0</h3>
+                        <p>Total Users</p>
+                    </div>
+                    <div class="admin-stat-card">
+                        <h3 id="totalPSSCount">0</h3>
+                        <p>PSS Stations</p>
+                    </div>
+                    <div class="admin-stat-card">
+                        <h3 id="totalEntriesCount">0</h3>
+                        <p>Total Entries</p>
+                    </div>
+                    <div class="admin-stat-card">
+                        <h3 id="todayEntriesCount">0</h3>
+                        <p>Today's Entries</p>
+                    </div>
+                </div>
+                
+                <!-- Data Table Section (Moved from View Tab) -->
+                <div style="margin-top: 2rem;">
+                    <h2 style="color: white; margin-bottom: 1rem;">📋 All Submissions Data</h2>
+                    <div class="view-controls">
+                        <div class="filter-group">
+                            <label>Filter by PSS:</label>
+                            <select id="filterPSS" class="form-control" onchange="filterData()">
+                                <option value="">All PSS Stations</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>From Date:</label>
+                            <input type="date" id="filterFromDate" class="form-control" onchange="filterData()">
+                        </div>
+                        <div class="filter-group">
+                            <label>To Date:</label>
+                            <input type="date" id="filterToDate" class="form-control" onchange="filterData()">
+                        </div>
+                        <div class="filter-group">
+                            <label>Staff Name:</label>
+                            <select id="filterStaff" class="form-control" onchange="filterData()">
+                                <option value="">All Staff</option>
+                            </select>
+                        </div>
+                        <button class="btn-secondary" onclick="clearAdminFilters()" style="align-self: flex-end;">
+                            Clear Filters
+                        </button>
+                    </div>
+                    <div id="dataTableContainer" class="data-table-container">
+                        <table id="dataTable" class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>PSS Station</th>
+                                    <th>Staff Name</th>
+                                    <th>Phone</th>
+                                    <th>Total MW</th>
+                                    <th>Feeders Data</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="dataTableBody">
+                                <tr>
+                                    <td colspan="7" style="text-align: center; padding: 2rem;">Loading data...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="uploadTab" class="admin-tab-content">
+                <h2>📤 Upload & Verify Data</h2>
+                
+                <!-- Sheet Selection (if multiple sheets) -->
+                <div id="sheetSelection" style="display: none; margin-bottom: 1.5rem;">
+                    <div class="upload-card">
+                        <h3>📋 Select Excel Sheet</h3>
+                        <p style="color: rgba(255,255,255,0.7); margin-bottom: 1rem;">Your Excel file has multiple sheets. Please select one:</p>
+                        <select id="sheetSelector" class="form-control" style="max-width: 400px; padding: 12px; background: rgba(30,41,59,0.95); color: white; border: 2px solid rgba(168,85,247,0.3); border-radius: 8px; font-size: 14px;">
+                        </select>
+                        <button class="btn-primary" onclick="loadSelectedSheet()" style="margin-top: 1rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+                            ✅ Load This Sheet
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Upload Section -->
+                <div class="upload-section">
+                    <div class="upload-card">
+                        <h3>📥 Upload Excel File</h3>
+                        <p style="color: rgba(255,255,255,0.7); margin-bottom: 1.5rem;">Upload your Excel file - System will compare with existing data and highlight changes</p>
+                        
+                        <input type="file" id="excelPreviewInput" accept=".xlsx,.xls,.csv" style="display: none;">
+                        <button class="btn-primary" onclick="document.getElementById('excelPreviewInput').click()" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 14px 32px; font-size: 16px;">
+                            📁 Choose Excel File to Upload
+                        </button>
+                        
+                        <div id="excelUploadStatus" style="margin-top: 1rem; color: white; font-weight: 600;"></div>
+                        
+                        <div style="margin-top: 1.5rem; padding: 1rem; background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); border-radius: 8px;">
+                            <p style="font-size: 12px; color: rgba(255,255,255,0.8); margin: 0 0 0.5rem 0; font-weight: 600;">✅ Upload Workflow:</p>
+                            <ul style="font-size: 11px; color: rgba(255,255,255,0.7); margin: 0; padding-left: 1.5rem;">
+                                <li><strong>Step 1:</strong> Choose your Excel file (PSS Stations, Users, or Daily Data)</li>
+                                <li><strong>Step 2:</strong> System compares with existing Firebase data</li>
+                                <li><strong>Step 3:</strong> Preview shows: 🟢 New | 🟡 Changed | ⚪ Unchanged</li>
+                                <li><strong>Step 4:</strong> Edit if needed, then click "Save to Firebase"</li>
+                                <li>Empty cells keep existing data (no deletion)</li>
+                                <li>Date format: <strong>dd-mm-yyyy</strong></li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <!-- Preview Table Container -->
+                    <div id="previewTableContainer" style="display: none; margin-top: 2rem;">
+                        <div class="upload-card">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                                <div>
+                                    <h3>📊 Preview & Verify Data</h3>
+                                    <p style="color: rgba(255,255,255,0.7); margin: 0.5rem 0 0 0; font-size: 13px;">
+                                        <span id="previewDataType" style="color: #10b981; font-weight: 600;"></span> - 
+                                        <span id="previewRecordCount" style="color: #3b82f6;"></span>
+                                    </p>
+                                    <p style="color: rgba(255,255,255,0.6); margin: 0.3rem 0 0 0; font-size: 12px;">
+                                        <span style="color: #10b981;">🟢 New</span> | 
+                                        <span style="color: #f59e0b;">🟡 Changed</span> | 
+                                        <span style="color: #6b7280;">⚪ Unchanged</span>
+                                    </p>
+                                </div>
+                                <div style="display: flex; gap: 1rem;">
+                                    <button class="btn-primary" onclick="cancelPreview()" style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);">
+                                        ❌ Cancel
+                                    </button>
+                                    <button class="btn-primary" onclick="savePreviewData()" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); padding: 12px 32px; font-size: 15px; font-weight: 700;">
+                                        ✅ Save to Firebase
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div style="max-height: 500px; overflow: auto; background: rgba(30,41,59,0.6); border-radius: 12px; padding: 1rem;">
+                                <table id="previewTable" style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                                    <thead id="previewTableHead" style="position: sticky; top: 0; background: rgba(30,41,59,0.95); z-index: 10;">
+                                        <!-- Headers will be populated dynamically -->
+                                    </thead>
+                                    <tbody id="previewTableBody">
+                                        <!-- Rows will be populated dynamically -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                            <div style="margin-top: 1rem; padding: 1rem; background: rgba(251,191,36,0.15); border: 1px solid rgba(251,191,36,0.3); border-radius: 8px;">
+                                <p style="font-size: 12px; color: rgba(255,255,255,0.8); margin: 0; font-weight: 600;">
+                                    ℹ️ You can edit cells directly. Modified cells turn yellow. Changes are compared with existing Firebase data.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <style>
+                    .preview-cell {
+                        padding: 8px;
+                        background: rgba(255,255,255,0.08);
+                        border: 1px solid rgba(168,85,247,0.2);
+                        border-radius: 6px;
+                        color: white;
+                        width: 100%;
+                        font-family: inherit;
+                        transition: all 0.3s ease;
+                        font-size: 12px;
+                    }
+                    
+                    .preview-cell:focus {
+                        background: rgba(255,255,255,0.15);
+                        border-color: rgba(168,85,247,0.6);
+                        outline: none;
+                    }
+                    
+                    .preview-cell.modified {
+                        background: rgba(251,191,36,0.3) !important;
+                        border-color: rgba(251,191,36,0.8) !important;
+                        font-weight: 600;
+                    }
+                    
+                    .preview-cell.new-record {
+                        background: rgba(16,185,129,0.2) !important;
+                        border-color: rgba(16,185,129,0.6) !important;
+                    }
+                    
+                    .preview-row-new {
+                        background: rgba(16,185,129,0.1);
+                    }
+                    
+                    .preview-row-changed {
+                        background: rgba(251,191,36,0.05);
+                    }
+                    
+                    .status-badge {
+                        padding: 4px 8px;
+                        border-radius: 4px;
+                        font-size: 11px;
+                        font-weight: 600;
+                        text-align: center;
+                    }
+                    
+                    .status-new {
+                        background: rgba(16,185,129,0.2);
+                        color: #10b981;
+                        border: 1px solid #10b981;
+                    }
+                    
+                    .status-changed {
+                        background: rgba(251,191,36,0.2);
+                        color: #f59e0b;
+                        border: 1px solid #f59e0b;
+                    }
+                    
+                    .status-unchanged {
+                        background: rgba(107,114,128,0.2);
+                        color: #9ca3af;
+                        border: 1px solid #6b7280;
+                    }
+                </style>
+            </div>
+
+            <div id="viewTab" class="admin-tab-content">
+                <h2>👁️ View All Data - Master Excel Format</h2>
+                <p style="color: rgba(255,255,255,0.7); margin-bottom: 1.5rem;">Complete comprehensive data with all 127 columns - I/C Sections, PTR Sections, Feeders, Equipment with full voltage, load, and time data</p>
+                
+                <!-- Filter Controls -->
+                <div class="view-controls" style="margin-bottom: 1.5rem;">
+                    <div class="filter-group">
+                        <label>Filter by PSS:</label>
+                        <select id="viewFilterPSS" class="form-control" onchange="filterViewAllData()">
+                            <option value="">All PSS Stations</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>From Date:</label>
+                        <input type="date" id="viewFilterFromDate" class="form-control" onchange="filterViewAllData()">
+                    </div>
+                    <div class="filter-group">
+                        <label>To Date:</label>
+                        <input type="date" id="viewFilterToDate" class="form-control" onchange="filterViewAllData()">
+                    </div>
+                    <div class="filter-group">
+                        <label>Staff Name:</label>
+                        <select id="viewFilterStaff" class="form-control" onchange="filterViewAllData()">
+                            <option value="">All Staff</option>
+                        </select>
+                    </div>
+                    <button class="btn-secondary" onclick="clearViewFilters()" style="align-self: flex-end;">
+                        Clear Filters
+                    </button>
+                    <button class="btn-primary" onclick="exportViewAllToExcel()" style="align-self: flex-end;">
+                        📊 Export Complete Excel
+                    </button>
+                </div>
+                
+                <!-- Excel-Style Data Display -->
+                <div id="excelDataContainer" class="data-table-container" style="max-height: 650px; overflow: auto; background: rgba(255,255,255,0.08); border-radius: 16px; padding: 0;">
+                    <table id="excelDataTable" style="width: 100%; border-collapse: collapse; font-size: 12px; background: rgba(30,41,59,0.6);">
+                        <thead style="position: sticky; top: 0; z-index: 100; background: rgba(30,41,59,0.98); box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
+                            <tr>
+                                <th rowspan="2" style="min-width: 90px; padding: 12px 8px; border: 1px solid rgba(255,255,255,0.15); text-align: center; font-weight: 700; color: white; position: sticky; left: 0; z-index: 101; background: rgba(30,41,59,0.98);">Date</th>
+                                <th rowspan="2" style="min-width: 130px; padding: 12px 8px; border: 1px solid rgba(255,255,255,0.15); text-align: center; font-weight: 700; color: #60a5fa; position: sticky; left: 90px; z-index: 101; background: rgba(30,41,59,0.98);">PSS Station</th>
+                                <th rowspan="2" style="min-width: 120px; padding: 12px 8px; border: 1px solid rgba(255,255,255,0.15); text-align: center; font-weight: 700; color: white; position: sticky; left: 220px; z-index: 101; background: rgba(30,41,59,0.98);">Staff Name</th>
+                                <th rowspan="2" style="min-width: 110px; padding: 12px 8px; border: 1px solid rgba(255,255,255,0.15); text-align: center; font-weight: 700; color: white; position: sticky; left: 340px; z-index: 101; background: rgba(30,41,59,0.98);">Phone</th>
+                                
+                                <!-- I/C-1 Section -->
+                                <th colspan="8" style="padding: 12px 8px; border: 2px solid #ef4444; background: rgba(239,68,68,0.25); text-align: center; font-weight: 700; color: #fca5a5; font-size: 13px;">📊 I/C-1 (GSS) 33KV</th>
+                                
+                                <!-- I/C-2 Section -->
+                                <th colspan="8" style="padding: 12px 8px; border: 2px solid #ef4444; background: rgba(239,68,68,0.25); text-align: center; font-weight: 700; color: #fca5a5; font-size: 13px;">📊 I/C-2 (GSS) 33KV</th>
+                                
+                                <!-- PTR Sections -->
+                                <th colspan="8" style="padding: 12px 8px; border: 2px solid #22c55e; background: rgba(34,197,94,0.25); text-align: center; font-weight: 700; color: #86efac; font-size: 13px;">🔄 PTR-1 33KV</th>
+                                <th colspan="8" style="padding: 12px 8px; border: 2px solid #22c55e; background: rgba(34,197,94,0.25); text-align: center; font-weight: 700; color: #86efac; font-size: 13px;">🔄 PTR-2 33KV</th>
+                                <th colspan="8" style="padding: 12px 8px; border: 2px solid #22c55e; background: rgba(34,197,94,0.25); text-align: center; font-weight: 700; color: #86efac; font-size: 13px;">🔄 PTR-1 11KV</th>
+                                <th colspan="8" style="padding: 12px 8px; border: 2px solid #22c55e; background: rgba(34,197,94,0.25); text-align: center; font-weight: 700; color: #86efac; font-size: 13px;">🔄 PTR-2 11KV</th>
+                                
+                                <!-- Feeder Sections -->
+                                <th colspan="9" style="padding: 12px 8px; border: 2px solid #3b82f6; background: rgba(59,130,246,0.25); text-align: center; font-weight: 700; color: #93c5fd; font-size: 13px;">⚡ FEEDER 1 (11KV)</th>
+                                <th colspan="9" style="padding: 12px 8px; border: 2px solid #3b82f6; background: rgba(59,130,246,0.25); text-align: center; font-weight: 700; color: #93c5fd; font-size: 13px;">⚡ FEEDER 2 (11KV)</th>
+                                <th colspan="9" style="padding: 12px 8px; border: 2px solid #3b82f6; background: rgba(59,130,246,0.25); text-align: center; font-weight: 700; color: #93c5fd; font-size: 13px;">⚡ FEEDER 3 (11KV)</th>
+                                <th colspan="9" style="padding: 12px 8px; border: 2px solid #3b82f6; background: rgba(59,130,246,0.25); text-align: center; font-weight: 700; color: #93c5fd; font-size: 13px;">⚡ FEEDER 4 (11KV)</th>
+                                <th colspan="9" style="padding: 12px 8px; border: 2px solid #3b82f6; background: rgba(59,130,246,0.25); text-align: center; font-weight: 700; color: #93c5fd; font-size: 13px;">⚡ FEEDER 5 (11KV)</th>
+                                <th colspan="9" style="padding: 12px 8px; border: 2px solid #3b82f6; background: rgba(59,130,246,0.25); text-align: center; font-weight: 700; color: #93c5fd; font-size: 13px;">⚡ FEEDER 6 (11KV)</th>
+                                
+                                <!-- Station Transformer -->
+                                <th colspan="8" style="padding: 12px 8px; border: 2px solid #f59e0b; background: rgba(245,158,11,0.25); text-align: center; font-weight: 700; color: #fcd34d; font-size: 13px;">🔋 Station Transformer</th>
+                                
+                                <!-- Charger -->
+                                <th colspan="9" style="padding: 12px 8px; border: 2px solid #a855f7; background: rgba(168,85,247,0.25); text-align: center; font-weight: 700; color: #d8b4fe; font-size: 13px;">🔌 Charger 48/24V</th>
+                                
+                                <!-- Totals -->
+                                <th rowspan="2" style="min-width: 100px; padding: 12px 8px; border: 2px solid #f59e0b; background: rgba(245,158,11,0.3); text-align: center; font-weight: 700; color: #fcd34d;">Total Max<br/>Load (A)</th>
+                                <th rowspan="2" style="min-width: 100px; padding: 12px 8px; border: 2px solid #06b6d4; background: rgba(6,182,212,0.3); text-align: center; font-weight: 700; color: #67e8f9;">Total Min<br/>Load (A)</th>
+                            </tr>
+                            <tr style="font-size: 10px; background: rgba(30,41,59,0.98);">
+                                <!-- I/C-1 Sub-headers -->
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Max V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Max V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Min V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Min V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Max I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Max I Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Min I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Min I Time</th>
+                                
+                                <!-- I/C-2 Sub-headers -->
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Max V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Max V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Min V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Min V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Max I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Max I Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Min I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Min I Time</th>
+                                
+                                <!-- PTR-1 33KV Sub-headers -->
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Max V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Max V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Min V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Min V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Max I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Max I Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Min I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Min I Time</th>
+                                
+                                <!-- PTR-2 33KV Sub-headers -->
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Max V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Max V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Min V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Min V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Max I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Max I Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Min I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Min I Time</th>
+                                
+                                <!-- PTR-1 11KV Sub-headers -->
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Max V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Max V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Min V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Min V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Max I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Max I Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Min I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Min I Time</th>
+                                
+                                <!-- PTR-2 11KV Sub-headers -->
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Max V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Max V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Min V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Min V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Max I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Max I Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Min I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(34,197,94,0.3); background: rgba(34,197,94,0.15); color: rgba(255,255,255,0.9);">Min I Time</th>
+                                
+                                <!-- Feeder 1 Sub-headers -->
+                                <th style="min-width: 50px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">PTR No</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max I Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min I Time</th>
+                                
+                                <!-- Feeder 2 Sub-headers -->
+                                <th style="min-width: 50px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">PTR No</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max I Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min I Time</th>
+                                
+                                <!-- Feeder 3 Sub-headers -->
+                                <th style="min-width: 50px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">PTR No</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max I Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min I Time</th>
+                                
+                                <!-- Feeder 4 Sub-headers -->
+                                <th style="min-width: 50px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">PTR No</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max I Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min I Time</th>
+                                
+                                <!-- Feeder 5 Sub-headers -->
+                                <th style="min-width: 50px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">PTR No</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max I Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min I Time</th>
+                                
+                                <!-- Feeder 6 Sub-headers -->
+                                <th style="min-width: 50px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">PTR No</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max I Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min I Time</th>
+                                
+                                <!-- Station Transformer Sub-headers -->
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(245,158,11,0.3); background: rgba(245,158,11,0.15); color: rgba(255,255,255,0.9);">Max V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(245,158,11,0.3); background: rgba(245,158,11,0.15); color: rgba(255,255,255,0.9);">Max V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(245,158,11,0.3); background: rgba(245,158,11,0.15); color: rgba(255,255,255,0.9);">Min V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(245,158,11,0.3); background: rgba(245,158,11,0.15); color: rgba(255,255,255,0.9);">Min V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(245,158,11,0.3); background: rgba(245,158,11,0.15); color: rgba(255,255,255,0.9);">Max I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(245,158,11,0.3); background: rgba(245,158,11,0.15); color: rgba(255,255,255,0.9);">Max I Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(245,158,11,0.3); background: rgba(245,158,11,0.15); color: rgba(255,255,255,0.9);">Min I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(245,158,11,0.3); background: rgba(245,158,11,0.15); color: rgba(255,255,255,0.9);">Min I Time</th>
+                                
+                                <!-- Charger Sub-headers -->
+                                <th style="min-width: 50px; padding: 8px 4px; border: 1px solid rgba(168,85,247,0.3); background: rgba(168,85,247,0.15); color: rgba(255,255,255,0.9);">PTR</th>
+                                <th style="min-width: 60px; padding: 8px 4px; border: 1px solid rgba(168,85,247,0.3); background: rgba(168,85,247,0.15); color: rgba(255,255,255,0.9);">Max V</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(168,85,247,0.3); background: rgba(168,85,247,0.15); color: rgba(255,255,255,0.9);">Max V Time</th>
+                                <th style="min-width: 60px; padding: 8px 4px; border: 1px solid rgba(168,85,247,0.3); background: rgba(168,85,247,0.15); color: rgba(255,255,255,0.9);">Min V</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(168,85,247,0.3); background: rgba(168,85,247,0.15); color: rgba(255,255,255,0.9);">Min V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(168,85,247,0.3); background: rgba(168,85,247,0.15); color: rgba(255,255,255,0.9);">Max I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(168,85,247,0.3); background: rgba(168,85,247,0.15); color: rgba(255,255,255,0.9);">Max I Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(168,85,247,0.3); background: rgba(168,85,247,0.15); color: rgba(255,255,255,0.9);">Min I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(168,85,247,0.3); background: rgba(168,85,247,0.15); color: rgba(255,255,255,0.9);">Min I Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="excelDataBody">
+                            <tr>
+                                <td colspan="123" style="text-align: center; padding: 2rem; color: rgba(255,255,255,0.7);">Loading comprehensive data...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="analyticsTab" class="admin-tab-content">
+                <!-- Dashboard Header -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                    <div>
+                        <h2 style="margin: 0; font-size: 28px; font-weight: 700; background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent; color: transparent;">📈 Advanced Analytics Dashboard</h2>
+                        <p style="margin: 0.5rem 0 0 0; color: rgba(255,255,255,0.6); font-size: 14px;">Comprehensive PSS Performance Monitoring & Insights</p>
+                    </div>
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <button onclick="refreshAnalytics()" style="padding: 12px 24px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; border: none; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 14px; box-shadow: 0 4px 15px rgba(59,130,246,0.3); transition: all 0.3s;">
+                            🔄 Refresh Data
+                        </button>
+                    </div>
+                </div>
+
+                <!-- KPI Cards Section -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin-bottom: 3rem;">
+                    <div class="kpi-card" style="background: linear-gradient(135deg, rgba(239,68,68,0.15) 0%, rgba(220,38,38,0.05) 100%); border: 2px solid rgba(239,68,68,0.3); border-radius: 16px; padding: 1.5rem; position: relative; overflow: hidden;">
+                        <div style="position: absolute; top: -20px; right: -20px; font-size: 80px; opacity: 0.1;">⚡</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem;">Highest Feeder Load</div>
+                        <div id="kpi-highest-load" style="font-size: 36px; font-weight: 700; color: #fca5a5; margin-bottom: 0.3rem;">---</div>
+                        <div style="font-size: 11px; color: rgba(255,255,255,0.5);">Peak Amperage Recorded</div>
+                    </div>
+
+                    <div class="kpi-card" style="background: linear-gradient(135deg, rgba(59,130,246,0.15) 0%, rgba(37,99,235,0.05) 100%); border: 2px solid rgba(59,130,246,0.3); border-radius: 16px; padding: 1.5rem; position: relative; overflow: hidden;">
+                        <div style="position: absolute; top: -20px; right: -20px; font-size: 80px; opacity: 0.1;">🔋</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem;">Average Voltage</div>
+                        <div id="kpi-avg-voltage" style="font-size: 36px; font-weight: 700; color: #60a5fa; margin-bottom: 0.3rem;">---</div>
+                        <div style="font-size: 11px; color: rgba(255,255,255,0.5);">Across All PSS Stations</div>
+                    </div>
+
+                    <div class="kpi-card" style="background: linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(217,119,6,0.05) 100%); border: 2px solid rgba(245,158,11,0.3); border-radius: 16px; padding: 1.5rem; position: relative; overflow: hidden;">
+                        <div style="position: absolute; top: -20px; right: -20px; font-size: 80px; opacity: 0.1;">⚙️</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem;">Most Fluctuations</div>
+                        <div id="kpi-fluctuating-feeder" style="font-size: 20px; font-weight: 700; color: #fbbf24; margin-bottom: 0.3rem;">---</div>
+                        <div style="font-size: 11px; color: rgba(255,255,255,0.5);">Voltage Instability Alert</div>
+                    </div>
+
+                    <div class="kpi-card" style="background: linear-gradient(135deg, rgba(16,185,129,0.15) 0%, rgba(5,150,105,0.05) 100%); border: 2px solid rgba(16,185,129,0.3); border-radius: 16px; padding: 1.5rem; position: relative; overflow: hidden;">
+                        <div style="position: absolute; top: -20px; right: -20px; font-size: 80px; opacity: 0.1;">🏭</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem;">PSS Stations</div>
+                        <div id="kpi-total-pss" style="font-size: 36px; font-weight: 700; color: #34d399; margin-bottom: 0.3rem;">---</div>
+                        <div style="font-size: 11px; color: rgba(255,255,255,0.5);">Active Monitoring Points</div>
+                    </div>
+
+                    <div class="kpi-card" style="background: linear-gradient(135deg, rgba(168,85,247,0.15) 0%, rgba(147,51,234,0.05) 100%); border: 2px solid rgba(168,85,247,0.3); border-radius: 16px; padding: 1.5rem; position: relative; overflow: hidden;">
+                        <div style="position: absolute; top: -20px; right: -20px; font-size: 80px; opacity: 0.1;">🔌</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem;">Avg Load per PSS</div>
+                        <div id="kpi-avg-load-pss" style="font-size: 36px; font-weight: 700; color: #c4b5fd; margin-bottom: 0.3rem;">---</div>
+                        <div style="font-size: 11px; color: rgba(255,255,255,0.5);">Mean Station Load (A)</div>
+                    </div>
+
+                    <div class="kpi-card" style="background: linear-gradient(135deg, rgba(6,182,212,0.15) 0%, rgba(8,145,178,0.05) 100%); border: 2px solid rgba(6,182,212,0.3); border-radius: 16px; padding: 1.5rem; position: relative; overflow: hidden;">
+                        <div style="position: absolute; top: -20px; right: -20px; font-size: 80px; opacity: 0.1;">📉</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.5rem;">Lowest Voltage</div>
+                        <div id="kpi-lowest-voltage" style="font-size: 36px; font-weight: 700; color: #22d3ee; margin-bottom: 0.3rem;">---</div>
+                        <div style="font-size: 11px; color: rgba(255,255,255,0.5);">Critical Voltage Point</div>
+                    </div>
+                </div>
+
+                <!-- Section A: PSS-Level Overview -->
+                <div style="margin-bottom: 3rem;">
+                    <h3 style="color: #60a5fa; margin-bottom: 1.5rem; font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="background: rgba(59,130,246,0.2); padding: 8px 12px; border-radius: 8px;">📊</span>
+                        Section A: PSS-Level Overview
+                    </h3>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem;">
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(59,130,246,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #93c5fd; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">📊 Average Load by PSS Station</h4>
+                            <div style="position: relative; height: 280px; width: 100%;">
+                                <canvas id="chartPSSAvgLoad"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(59,130,246,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #93c5fd; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">⚡ Voltage Stability by PSS</h4>
+                            <div style="position: relative; height: 280px; width: 100%;">
+                                <canvas id="chartPSSVoltageStability"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(59,130,246,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3); grid-column: span 2;">
+                            <h4 style="color: #93c5fd; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">🔥 Load Intensity Heatmap</h4>
+                            <div style="position: relative; height: 180px; width: 100%;">
+                                <canvas id="chartLoadHeatmap"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Section B: Feeder-Level Analysis -->
+                <div style="margin-bottom: 3rem;">
+                    <h3 style="color: #34d399; margin-bottom: 1.5rem; font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="background: rgba(16,185,129,0.2); padding: 8px 12px; border-radius: 8px;">⚡</span>
+                        Section B: Feeder-Level Analysis
+                    </h3>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;">
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(16,185,129,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #6ee7b7; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">📈 Feeder Load Trends</h4>
+                            <div style="position: relative; height: 280px; width: 100%;">
+                                <canvas id="chartFeederLoadTrend"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(16,185,129,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #6ee7b7; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">📊 Feeder Contribution</h4>
+                            <div style="position: relative; height: 280px; width: 100%;">
+                                <canvas id="chartFeederContribution"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(16,185,129,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #6ee7b7; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">🕸️ Feeder Performance Radar</h4>
+                            <div style="position: relative; height: 280px; width: 100%;">
+                                <canvas id="chartFeederRadar"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Section C: Voltage Stability -->
+                <div style="margin-bottom: 3rem;">
+                    <h3 style="color: #fbbf24; margin-bottom: 1.5rem; font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="background: rgba(245,158,11,0.2); padding: 8px 12px; border-radius: 8px;">🔋</span>
+                        Section C: Voltage Stability Analysis
+                    </h3>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;">
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(245,158,11,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #fcd34d; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">⚡ Voltage vs Load (Dual-Axis)</h4>
+                            <div style="position: relative; height: 280px; width: 100%;">
+                                <canvas id="chartVoltageLoadDual"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(245,158,11,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #fcd34d; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">📦 Voltage Range (Box Plot)</h4>
+                            <div style="position: relative; height: 280px; width: 100%;">
+                                <canvas id="chartVoltageBoxPlot"></canvas>
+                            </div>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(245,158,11,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #fcd34d; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">📉 Voltage Trend</h4>
+                            <div style="position: relative; height: 280px; width: 100%;">
+                                <canvas id="chartVoltageTrend"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Section D: Time-Based Insights -->
+                <div style="margin-bottom: 3rem;">
+                    <h3 style="color: #c4b5fd; margin-bottom: 1.5rem; font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="background: rgba(168,85,247,0.2); padding: 8px 12px; border-radius: 8px;">⏰</span>
+                        Section D: Time-Based Load Insights
+                    </h3>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem;">
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(168,85,247,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #d8b4fe; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">⏰ Peak Load Time Distribution</h4>
+                            <div style="position: relative; height: 280px; width: 100%;"><canvas id="chartTimeDistribution"></canvas></div>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(168,85,247,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #d8b4fe; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">� Daily Load Calendar</h4>
+                            <div style="position: relative; height: 280px; width: 100%;"><canvas id="chartCalendarHeatmap"></canvas></div>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(168,85,247,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3); grid-column: span 2;">
+                            <h4 style="color: #d8b4fe; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">🔥 Hour × Feeder Load Matrix</h4>
+                            <div style="position: relative; height: 220px; width: 100%;"><canvas id="chartHourFeederMatrix"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section E: Comparative & Summary -->
+                <div style="margin-bottom: 3rem;">
+                    <h3 style="color: #22d3ee; margin-bottom: 1.5rem; font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="background: rgba(6,182,212,0.2); padding: 8px 12px; border-radius: 8px;">📊</span>
+                        Section E: Comparative Analysis & Summary
+                    </h3>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem;">
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(6,182,212,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #67e8f9; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">🍩 Feeder Load Distribution</h4>
+                            <div style="position: relative; height: 280px; width: 100%;"><canvas id="chartFeederDonut"></canvas></div>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(6,182,212,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #67e8f9; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">📊 Voltage-Load Scatter</h4>
+                            <div style="position: relative; height: 280px; width: 100%;"><canvas id="chartVoltageLoadScatter"></canvas></div>
+                        </div>
+
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(6,182,212,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3); grid-column: span 2;">
+                            <h4 style="color: #67e8f9; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">🫧 Load Intensity Bubble Chart</h4>
+                            <div style="position: relative; height: 220px; width: 100%;"><canvas id="chartLoadBubble"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Assistant Tab -->
+            <div id="ai-assistantTab" class="admin-tab-content">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <div>
+                        <h2 style="margin: 0;">🤖 AI Data Assistant</h2>
+                        <p style="color: rgba(255,255,255,0.7); margin: 0.25rem 0 0 0;">Ask questions about your PSS loading data and get instant AI-powered insights</p>
+                    </div>
+                    <button 
+                        id="clearChatBtn" 
+                        class="btn-danger" 
+                        style="padding: 0.75rem 1.5rem; background: rgba(239,68,68,0.2); border: 1px solid rgba(239,68,68,0.5);"
+                    >
+                        🗑️ Clear Chat
+                    </button>
+                </div>
+                
+                <div class="chatbot-container" style="height: calc(100vh - 220px); max-height: none;">
+                    <!-- Chat Messages Area -->
+                    <div id="chatMessages" class="chat-messages" style="flex: 1;">
+                        <div class="chat-message bot-message">
+                            <div class="message-avatar">🤖</div>
+                            <div class="message-content">
+                                <p><strong>🚀 Welcome to PSS Data AI Assistant!</strong></p>
+                                <p>I'm powered by advanced AI models and have full access to your loading data. I can help you with:</p>
+                                <ul>
+                                    <li>📊 Finding which PSS stations submitted data today</li>
+                                    <li>⚡ Identifying highest/lowest load readings</li>
+                                    <li>🔋 Checking voltage compliance issues</li>
+                                    <li>📈 Analyzing trends and patterns</li>
+                                    <li>🔍 Searching specific feeders or dates</li>
+                                    <li>📉 Comparing PSS performance</li>
+                                </ul>
+                                <p><strong>Ready to help!</strong> Configure API keys in ⚙️ Settings tab, then start asking questions below.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Suggestions -->
+                    <div class="chat-suggestions">
+                        <button class="suggestion-chip" data-query="Which PSS stations submitted data today?">
+                            📅 Today's Submissions
+                        </button>
+                        <button class="suggestion-chip" data-query="What is the highest load recorded in the last week?">
+                            ⚡ Highest Load
+                        </button>
+                        <button class="suggestion-chip" data-query="Show me any voltage violations or issues">
+                            ⚠️ Voltage Issues
+                        </button>
+                        <button class="suggestion-chip" data-query="Which feeders have the most load?">
+                            🔌 Top Feeders
+                        </button>
+                        <button class="suggestion-chip" data-query="Summarize today's overall system status">
+                            📊 System Summary
+                        </button>
+                    </div>
+
+                    <!-- Chat Input Area -->
+                    <div class="chat-input-container">
+                        <textarea 
+                            id="chatInput" 
+                            placeholder="Ask about your PSS data... (Press Enter to send, Shift+Enter for new line)"
+                            rows="1"
+                        ></textarea>
+                        <button id="sendChatBtn" class="btn-send">
+                            <span>Send</span>
+                            <span>➤</span>
+                        </button>
+                    </div>
+
+                    <!-- Typing Indicator (hidden by default) -->
+                    <div id="typingIndicator" class="typing-indicator" style="display: none;">
+                        <div class="message-avatar">🤖</div>
+                        <div class="typing-content">
+                            <div class="typing-status">🔍 Analyzing your data...</div>
+                            <div class="typing-dots">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="settingsTab" class="admin-tab-content">
+                <h2>⚙️ System Settings</h2>
+                <div class="settings-grid">
+                    <!-- AI Assistant Configuration -->
+                    <div class="settings-card" style="grid-column: span 2;">
+                        <h3>🤖 AI Assistant Configuration</h3>
+                        <div style="display: grid; gap: 1rem; margin-top: 1rem;">
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem;">
+                                <div>
+                                    <label style="display: block; color: #a78bfa; margin-bottom: 0.5rem; font-size: 12px;">OpenRouter API Key</label>
+                                    <input 
+                                        type="password" 
+                                        id="openrouterApiKey" 
+                                        placeholder="sk-or-v1-..." 
+                                        style="width: 100%; padding: 0.75rem; background: rgba(30,41,59,0.8); border: 1px solid rgba(168,85,247,0.3); border-radius: 8px; color: white;"
+                                    />
+                                </div>
+                                <div>
+                                    <label style="display: block; color: #67e8f9; margin-bottom: 0.5rem; font-size: 12px;">Groq API Key (Fast)</label>
+                                    <input 
+                                        type="password" 
+                                        id="groqApiKey" 
+                                        placeholder="gsk_..." 
+                                        style="width: 100%; padding: 0.75rem; background: rgba(30,41,59,0.8); border: 1px solid rgba(6,182,212,0.3); border-radius: 8px; color: white;"
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label style="display: block; color: #a78bfa; margin-bottom: 0.5rem; font-size: 12px;">AI Model</label>
+                                <select 
+                                    id="aiModelSelect" 
+                                    style="width: 100%; padding: 0.75rem; background: rgba(30,41,59,0.8); border: 1px solid rgba(168,85,247,0.3); border-radius: 8px; color: white; font-size: 14px;"
+                                >
+                                    <optgroup label="FREE MODELS - No Rate Limits (OpenRouter)">
+                                        <option value="deepseek/deepseek-v3.1:free" selected>DeepSeek V3.1 - MOST POWERFUL (671B/37B active) 164K Context</option>
+                                        <option value="nvidia/nemotron-nano-9b-v2:free">NVIDIA Nemotron Nano 9B V2 - Reasoning Expert 128K</option>
+                                        <option value="kwaipilot/kat-coder-pro-v1:free">KAT-Coder-Pro V1 - Best Coding Model 256K</option>
+                                        <option value="openrouter/polaris-alpha:free">Polaris Alpha - General Purpose 256K</option>
+                                        <option value="alibaba/tongyi-deepresearch-30b-a3b:free">Tongyi DeepResearch 30B - Deep Analysis 131K</option>
+                                        <option value="meituan/longcat-flash-chat:free">LongCat Flash Chat - MoE 560B/27B active 131K</option>
+                                        <option value="nvidia/nemotron-nano-12b-2-vl:free">NVIDIA Nemotron Nano 12B 2 VL - Vision+Text 128K</option>
+                                        <option value="google/gemma-2-9b-it:free">Gemma 2 9B - Fast & Reliable (Google)</option>
+                                        <option value="qwen/qwen-2-7b-instruct:free">Qwen 2 7B - Multilingual</option>
+                                        <option value="meta-llama/llama-3.2-3b-instruct:free">Llama 3.2 3B - Ultra Fast</option>
+                                        <option value="microsoft/phi-3-mini-128k-instruct:free">Phi-3 Mini - 128K Context</option>
+                                    </optgroup>
+                                    <optgroup label="FAST BUT LIMITED - 100K tokens/day (Groq Cloud)">
+                                        <option value="groq/llama-3.3-70b-versatile">Llama 3.3 70B Versatile - Best Overall</option>
+                                        <option value="groq/llama-3.1-8b-instant">⚡ Llama 3.1 8B Instant - Lightning Fast</option>
+                                        <option value="groq/meta-llama/llama-4-maverick-17b-128e-instruct">🆕 GPT-4 Maverick 17B - 128K Context Window</option>
+                                        <option value="groq/meta-llama/llama-4-scout-17b-16e-instruct">🆕 GPT-4 Scout 17B - Advanced Reasoning</option>
+                                        <option value="groq/qwen/qwen3-32b">🌐 Qwen 3 32B - Multilingual Expert</option>
+                                        <option value="groq/groq/compound">� Groq Compound - Complex Analysis</option>
+                                        <option value="groq/openai/gpt-oss-120b">🔥 GPT OSS 120B - Most Powerful</option>
+                                        <option value="groq/openai/gpt-oss-20b">💨 GPT OSS 20B - Balanced Speed</option>
+                                    </optgroup>
+                                    <optgroup label="💰 PREMIUM (OpenRouter - Paid)">
+                                        <option value="openai/gpt-4o-mini">GPT-4o Mini ($)</option>
+                                        <option value="openai/gpt-3.5-turbo">GPT-3.5 Turbo ($)</option>
+                                        <option value="google/gemini-flash-1.5">Gemini Flash 1.5 ($)</option>
+                                    </optgroup>
+                                </select>
+                            </div>
+                            <div style="display: flex; gap: 1rem;">
+                                <button id="saveApiKeyBtn" class="btn-primary" style="flex: 1;">💾 Save Configuration</button>
+                                <button id="testChatBtn" class="btn-primary" style="flex: 1; background: rgba(16,185,129,0.3); border: 1px solid rgba(16,185,129,0.5);">🧪 Test Connection</button>
+                            </div>
+                            <p style="margin: 0; font-size: 11px; color: rgba(255,255,255,0.5);">
+                                <strong style="color: #10b981;">RECOMMENDED:</strong> Qwen3 235B & DeepSeek R1T - Most powerful free models with NO rate limits!
+                                <br>Groq models are faster but limited to 100K tokens/day. <a href="https://openrouter.ai/keys" target="_blank" style="color: #a78bfa;">Get OpenRouter Key</a>
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div class="settings-card">
+                        <h3>User Management</h3>
+                        <button class="btn-primary" onclick="manageUsers()">Manage Users</button>
+                    </div>
+                    <div class="settings-card">
+                        <h3>PSS Configuration</h3>
+                        <button class="btn-primary" onclick="managePSS()">Manage PSS Stations</button>
+                    </div>
+                    <div class="settings-card">
+                        <h3>Database Backup</h3>
+                        <button class="btn-primary" onclick="backupDatabase()">Download Backup</button>
+                    </div>
+                    <div class="settings-card">
+                        <h3>System Logs</h3>
+                        <button class="btn-primary" onclick="viewLogs()">View Activity Logs</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <script>
+            // Admin tab switching
+            document.addEventListener('DOMContentLoaded', () => {
+                const adminTabs = document.querySelectorAll('.admin-tab');
+                adminTabs.forEach(tab => {
+                    tab.addEventListener('click', () => {
+                        const targetTab = tab.getAttribute('data-tab');
+                        
+                        // Remove active class from all tabs and contents
+                        document.querySelectorAll('.admin-tab').forEach(t => t.classList.remove('active'));
+                        document.querySelectorAll('.admin-tab-content').forEach(c => c.classList.remove('active'));
+                        
+                        // Add active class to clicked tab and corresponding content
+                        tab.classList.add('active');
+                        document.getElementById(targetTab + 'Tab').classList.add('active');
+                        
+                        // Load tab content
+                        if (targetTab === 'analytics' && typeof loadAnalyticsWindow === 'function') {
+                            loadAnalyticsWindow();
+                        } else if (targetTab === 'overview' && typeof loadOverviewWindow === 'function') {
+                            loadOverviewWindow();
+                        } else if (targetTab === 'view' && typeof loadViewAllExcelData === 'function') {
+                            loadViewAllExcelData();
+                        } else if (targetTab === 'ai-assistant' && typeof initializeChatbot === 'function') {
+                            initializeChatbot();
+                            if (typeof allSubmissionsData !== 'undefined') {
+                                updateDataContext(allSubmissionsData);
+                            }
+                        }
+                    });
+                });
+            });
+        </script>
+    </div>
+
+    <!-- ==================== USER DASHBOARD ==================== -->
+    <div id="userDashboardScreen" class="screen">
+        <!-- User Header -->
+        <div class="user-header">
+            <div class="user-header-left">
+                <div class="user-avatar">K</div>
+                <div class="user-welcome">
+                    <h1>Welcome, User!</h1>
+                    <p>Ready to submit today's data?</p>
+                </div>
+            </div>
+            <div class="user-header-right">
+                <button class="btn-new-entry" onclick="openNewEntryForm()">
+                    <span>+ New Entry</span>
+                </button>
+                <button class="btn-logout" onclick="logout()">
+                    <span>Logout</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- User Main Content -->
+        <div class="user-main-content">
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card" data-stat-id="total-submissions">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #10b981, #059669);">
+                        <span class="stat-icon-wrapper">📊</span>
+                    </div>
+                    <div class="stat-info">
+                        <h3 class="stat-number">0</h3>
+                        <p class="stat-label">Total Submissions</p>
+                    </div>
+                </div>
+                <div class="stat-card" data-stat-id="month-submissions">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed);">
+                        <span class="stat-icon-wrapper">✅</span>
+                    </div>
+                    <div class="stat-info">
+                        <h3 class="stat-number">0</h3>
+                        <p class="stat-label">This Month</p>
+                    </div>
+                </div>
+                <div class="stat-card" data-stat-id="submission-streak">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
+                        <span class="stat-icon-wrapper">🔥</span>
+                    </div>
+                    <div class="stat-info">
+                        <h3 class="stat-number">0</h3>
+                        <p class="stat-label">Day Streak</p>
+                    </div>
+                </div>
+                <div class="stat-card" data-stat-id="last-submission">
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #06b6d4, #0891b2);">
+                        <span class="stat-icon-wrapper">⏰</span>
+                    </div>
+                    <div class="stat-info">
+                        <h3 class="stat-number">Never</h3>
+                        <p class="stat-label">Last Submission</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PSS Statistics Section -->
+            <div class="dashboard-section" id="pssStatsSection">
+                <h2>📈 PSS Statistics Dashboard</h2>
+                
+                <!-- Date Range Filter -->
+                <div class="filter-controls" style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 200px;">
+                        <label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 14px;">From Date</label>
+                        <input type="date" id="statsFromDate" class="form-control" onchange="updatePSSStats()">
+                    </div>
+                    <div style="flex: 1; min-width: 200px;">
+                        <label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 14px;">To Date</label>
+                        <input type="date" id="statsToDate" class="form-control" onchange="updatePSSStats()">
+                    </div>
+                    <div style="display: flex; align-items: flex-end;">
+                        <button class="btn-secondary" onclick="clearStatsFilter()" style="padding: 0.75rem 1.5rem;">Clear Filter</button>
+                    </div>
+                </div>
+                
+                <!-- PSS Stats Grid -->
+                <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #3b82f6, #2563eb);">
+                            <span>📦</span>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="pssTotalSubmissions">0</h3>
+                            <p>Total Submissions (PSS)</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #ef4444, #dc2626);">
+                            <span>🔴</span>
+                        </div>
+                        <div class="stat-info" id="pssFeeder1Peak" style="transition: all 0.3s ease; opacity: 1; transform: translateY(0);">
+                            <div style="font-size: 24px; font-weight: 700; color: #ef4444;">0.00 A</div>
+                            <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 0.25rem;">@ --:-- | 0.00 kV</div>
+                            <p style="margin-top: 0.5rem; font-size: 13px; font-weight: 600;">⚡ Peak Load (Today)</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #3b82f6, #2563eb);">
+                            <span>�</span>
+                        </div>
+                        <div class="stat-info" id="pssFeeder1Min" style="transition: all 0.3s ease; opacity: 1; transform: translateY(0);">
+                            <div style="font-size: 24px; font-weight: 700; color: #3b82f6;">0.00 A</div>
+                            <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 0.25rem;">@ --:-- | 0.00 kV</div>
+                            <p style="margin-top: 0.5rem; font-size: 13px; font-weight: 600;">⚡ Min Load (Today)</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
+                            <span>👥</span>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="pssActiveStaff">0</h3>
+                            <p>Active Staff Members</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Top Performers Leaderboard -->
+                <div style="margin-top: 1.5rem;">
+                    <h3 style="color: rgba(255,255,255,0.9); margin-bottom: 1rem; font-size: 18px;">🏆 Top Performers (Submission Count)</h3>
+                    <div id="leaderboardContainer" style="background: rgba(255,255,255,0.05); border-radius: 12px; padding: 1rem;">
+                        <p style="text-align: center; color: rgba(255,255,255,0.5); padding: 1rem;">No data available</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Submissions -->
+            <div class="dashboard-section">
+                <h2>📋 Recent Submissions</h2>
+                <div id="recentSubmissionsContainer" class="submissions-list">
+                    <p style="text-align: center; color: rgba(255,255,255,0.6); padding: 2rem;">No submissions yet. Click "+ New Entry" to submit your first data.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== NEW ENTRY FORM MODAL (MULTI-STEP WIZARD) ==================== -->
+    <div id="newEntryModal" class="modal-overlay" style="display: none;">
+        <div class="modal-container" style="max-width: 900px; width: 95%;">
+            <div class="modal-header">
+                <h2>📝 PSS Loading Data Entry</h2>
+                <button class="modal-close" onclick="closeNewEntryForm()">✕</button>
+            </div>
+            
+            <!-- Progress Stepper -->
+            <div class="stepper-container">
+                <div class="stepper-step active" data-step="0">
+                    <div class="stepper-circle">1</div>
+                    <div class="stepper-label">Staff</div>
+                </div>
+                <div class="stepper-line"></div>
+                <div class="stepper-step" data-step="1">
+                    <div class="stepper-circle">2</div>
+                    <div class="stepper-label">I/C</div>
+                </div>
+                <div class="stepper-line"></div>
+                <div class="stepper-step" data-step="2">
+                    <div class="stepper-circle">3</div>
+                    <div class="stepper-label">PTR</div>
+                </div>
+                <div class="stepper-line"></div>
+                <div class="stepper-step" data-step="3">
+                    <div class="stepper-circle">4</div>
+                    <div class="stepper-label">Feeders</div>
+                </div>
+                <div class="stepper-line"></div>
+                <div class="stepper-step" data-step="4">
+                    <div class="stepper-circle">5</div>
+                    <div class="stepper-label">Equipment</div>
+                </div>
+            </div>
+            
+            <div class="modal-body" style="padding: 30px; min-height: 500px;">
+                <!-- Step 0: Staff Selection -->
+                <div id="step0" class="wizard-step active">
+                    <h3 style="color: #60a5fa; margin-bottom: 20px;">👥 Staff Information</h3>
+                    
+                    <div class="form-group">
+                        <label>PSS Station</label>
+                        <input type="text" id="formPSSStation" readonly class="form-control-readonly">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Date *</label>
+                        <input type="date" id="formDate" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Select Staff Member *</label>
+                        <div class="staff-cards-container">
+                            <div class="staff-column">
+                                <h4>👷 Linemen</h4>
+                                <div id="linemenCards" class="staff-cards">
+                                    <!-- Linemen cards will be added here -->
+                                </div>
+                            </div>
+                            <div class="staff-column">
+                                <h4>🔧 Helpers</h4>
+                                <div id="helpersCards" class="staff-cards">
+                                    <!-- Helpers cards will be added here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <input type="hidden" id="selectedStaffMember" value="">
+                </div>
+
+                <!-- Step 1: I/C Data -->
+                <div id="step1" class="wizard-step">
+                    <h3 style="color: #ef4444; margin-bottom: 20px;">📊 33KV I/C (GSS) SECTIONS</h3>
+                    <div id="icContainer"></div>
+                </div>
+
+                <!-- Step 2: PTR Data -->
+                <div id="step2" class="wizard-step">
+                    <h3 style="color: #22c55e; margin-bottom: 20px;">🔄 PTR SECTIONS</h3>
+                    <div id="ptrContainer"></div>
+                </div>
+
+                <!-- Step 3: Feeder Data -->
+                <div id="step3" class="wizard-step">
+                    <h3 style="color: #3b82f6; margin-bottom: 20px;">⚡ FEEDER SECTIONS</h3>
+                    <div id="feedersContainer"></div>
+                </div>
+
+                <!-- Step 4: Equipment Data -->
+                <div id="step4" class="wizard-step">
+                    <h3 style="color: #f59e0b; margin-bottom: 20px;">🔋 EQUIPMENT SECTIONS</h3>
+                    <div id="equipmentContainer"></div>
+                </div>
+            </div>
+
+            <!-- Wizard Navigation -->
+            <div class="modal-footer" style="display: flex; justify-content: space-between; padding: 20px 30px; background: rgba(0,0,0,0.2); border-top: 1px solid rgba(255,255,255,0.1);">
+                <button class="btn-secondary" id="prevBtn" onclick="previousStep()" style="display: none;">
+                    ← Previous
+                </button>
+                <div style="flex: 1;"></div>
+                <button class="btn-primary" id="nextBtn" onclick="nextStep()">
+                    Next →
+                </button>
+                <button class="btn-primary" id="submitBtn" onclick="submitLoadingData()" style="display: none; background: linear-gradient(135deg, #10b981, #059669);">
+                    ✓ Submit Data
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== SCRIPTS ==================== -->
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+
+    <!-- External Libraries -->
+    <!-- SheetJS for Excel Import/Export (127 columns) -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    
+    <!-- Chart.js for Analytics & Graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    
+    <!-- GSAP for Smooth Animations (Optional but recommended) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.4/gsap.min.js"></script>
+
+    <!-- App Scripts (Order matters - dependencies first) -->
+    <script src="js/firebase-config.js?v=28"></script>
+    <script src="js/app.js?v=27"></script>
+    <script src="js/analytics.js?v=27"></script>
+    <script src="js/excel-handler.js?v=27"></script>
+    <script src="js/auth.js?v=27"></script>
+    <script src="js/new-dashboard-analytics.js?v=1"></script>
+    <script src="js/new-analytics.js?v=30"></script>
+    <script src="js/chatbot.js?v=1"></script>
+    <script src="js/admin.js?v=33"></script>
+    <script src="js/custom-select.js?v=5"></script>
+    <script src="js/user.js?v=38"></script>
+    <!-- form-handler.js removed - using wizard in user.js -->
+
+</body>
+</html>
+
+
+
+
+
+
+

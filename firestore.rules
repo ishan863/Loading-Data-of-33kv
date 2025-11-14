@@ -1,0 +1,54 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // TEMPORARY: Allow all writes for initial data upload
+    // TODO: Change this after uploading data!
+    match /{document=**} {
+      allow read, write: if true;
+    }
+    
+    // PRODUCTION RULES (uncomment after initial upload):
+    /*
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    
+    // PSS Stations configuration
+    match /pss_stations/{stationId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    
+    // Daily entries
+    match /daily_entries/{entryId} {
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow update, delete: if isAdmin();
+    }
+    
+    // Admin logs
+    match /admin_logs/{logId} {
+      allow read, write: if isAdmin();
+    }
+    
+    // Analytics collection
+    match /analytics/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+    */
+  }
+}

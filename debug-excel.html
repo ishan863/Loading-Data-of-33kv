@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Excel Format</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 1200px;
+            margin: 0 auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #667eea;
+            margin-bottom: 30px;
+        }
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            margin-bottom: 30px;
+        }
+        .upload-area:hover {
+            background: #f8f9fa;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 12px;
+        }
+        h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        th {
+            background: #667eea;
+            color: white;
+            font-weight: 600;
+        }
+        tr:hover {
+            background: #f8f9fa;
+        }
+        .column-info {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #ffc107;
+        }
+        .column-info h3 {
+            color: #856404;
+            margin-bottom: 10px;
+        }
+        .column-list {
+            color: #856404;
+            font-family: monospace;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Debug Excel Format</h1>
+        <p style="margin-bottom: 20px; color: #666;">Upload your Excel to see exactly what columns it has</p>
+
+        <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+            <div style="font-size: 64px; margin-bottom: 20px;">📁</div>
+            <div style="font-size: 18px; font-weight: 600;">Click to Upload Excel File</div>
+        </div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls" onchange="analyzeFile(event)">
+
+        <div id="results"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <script>
+        function analyzeFile(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                
+                let html = '';
+
+                // Sheet 1
+                html += '<div class="section">';
+                html += '<h2>📄 Sheet 1: ' + workbook.SheetNames[0] + '</h2>';
+                
+                const sheet1 = workbook.Sheets[workbook.SheetNames[0]];
+                const sheet1Data = XLSX.utils.sheet_to_json(sheet1);
+                
+                html += '<div class="column-info">';
+                html += '<h3>Columns Found:</h3>';
+                html += '<div class="column-list">';
+                if (sheet1Data.length > 0) {
+                    Object.keys(sheet1Data[0]).forEach(key => {
+                        html += `• "${key}"<br>`;
+                    });
+                }
+                html += '</div></div>';
+                
+                html += '<p><strong>Total Rows:</strong> ' + sheet1Data.length + '</p>';
+                html += '<p><strong>Sample Data (first 5 rows):</strong></p>';
+                html += '<table><thead><tr>';
+                
+                if (sheet1Data.length > 0) {
+                    Object.keys(sheet1Data[0]).forEach(key => {
+                        html += '<th>' + key + '</th>';
+                    });
+                    html += '</tr></thead><tbody>';
+                    
+                    sheet1Data.slice(0, 5).forEach(row => {
+                        html += '<tr>';
+                        Object.values(row).forEach(val => {
+                            html += '<td>' + val + '</td>';
+                        });
+                        html += '</tr>';
+                    });
+                }
+                html += '</tbody></table></div>';
+
+                // Sheet 2
+                html += '<div class="section">';
+                html += '<h2>📄 Sheet 2: ' + workbook.SheetNames[1] + '</h2>';
+                
+                const sheet2 = workbook.Sheets[workbook.SheetNames[1]];
+                const sheet2Data = XLSX.utils.sheet_to_json(sheet2);
+                
+                html += '<div class="column-info">';
+                html += '<h3>Columns Found:</h3>';
+                html += '<div class="column-list">';
+                if (sheet2Data.length > 0) {
+                    Object.keys(sheet2Data[0]).forEach(key => {
+                        html += `• "${key}"<br>`;
+                    });
+                }
+                html += '</div></div>';
+                
+                html += '<p><strong>Total Rows:</strong> ' + sheet2Data.length + '</p>';
+                html += '<p><strong>Sample Data (first 5 rows):</strong></p>';
+                html += '<table><thead><tr>';
+                
+                if (sheet2Data.length > 0) {
+                    Object.keys(sheet2Data[0]).forEach(key => {
+                        html += '<th>' + key + '</th>';
+                    });
+                    html += '</tr></thead><tbody>';
+                    
+                    sheet2Data.slice(0, 5).forEach(row => {
+                        html += '<tr>';
+                        Object.values(row).forEach(val => {
+                            html += '<td>' + (val || 'empty') + '</td>';
+                        });
+                        html += '</tr>';
+                    });
+                }
+                html += '</tbody></table></div>';
+
+                // Expected Format
+                html += '<div class="section">';
+                html += '<h2>✅ Expected Format</h2>';
+                html += '<div class="column-info">';
+                html += '<h3>Sheet 1 should have:</h3>';
+                html += '<div class="column-list">';
+                html += '• "pss/admin name" (or similar)<br>';
+                html += '• "phone number" (or similar)<br>';
+                html += '</div>';
+                html += '<h3 style="margin-top: 15px;">Sheet 2 should have:</h3>';
+                html += '<div class="column-list">';
+                html += '• "PSS NAME" (or similar)<br>';
+                html += '• "FEEDERS" (or similar)<br>';
+                html += '• "LINEMAN" (or similar)<br>';
+                html += '• "HELPER" (or similar)<br>';
+                html += '</div>';
+                html += '</div></div>';
+
+                // Show column mapping
+                html += '<div class="section">';
+                html += '<h2>🔍 What Script Will Use</h2>';
+                
+                html += '<h3>Sheet 1 Mapping:</h3>';
+                html += '<ul>';
+                const adminKeys = sheet1Data.length > 0 ? Object.keys(sheet1Data[0]) : [];
+                const nameKey = adminKeys.find(k => k.toLowerCase().includes('name')) || 'NOT FOUND';
+                const phoneKey = adminKeys.find(k => k.toLowerCase().includes('phone')) || 'NOT FOUND';
+                html += '<li><strong>Name:</strong> ' + nameKey + '</li>';
+                html += '<li><strong>Phone:</strong> ' + phoneKey + '</li>';
+                html += '</ul>';
+                
+                html += '<h3>Sheet 2 Mapping:</h3>';
+                html += '<ul>';
+                const pssKeys = sheet2Data.length > 0 ? Object.keys(sheet2Data[0]) : [];
+                const pssNameKey = pssKeys.find(k => k.toLowerCase().includes('pss') || k.toLowerCase().includes('name')) || 'NOT FOUND';
+                const feedersKey = pssKeys.find(k => k.toLowerCase().includes('feeder')) || 'NOT FOUND';
+                const linemanKey = pssKeys.find(k => k.toLowerCase().includes('lineman')) || 'NOT FOUND';
+                const helperKey = pssKeys.find(k => k.toLowerCase().includes('helper')) || 'NOT FOUND';
+                html += '<li><strong>PSS Name:</strong> ' + pssNameKey + '</li>';
+                html += '<li><strong>Feeders:</strong> ' + feedersKey + '</li>';
+                html += '<li><strong>Lineman:</strong> ' + linemanKey + '</li>';
+                html += '<li><strong>Helper:</strong> ' + helperKey + '</li>';
+                html += '</ul>';
+                html += '</div>';
+
+                document.getElementById('results').innerHTML = html;
+            };
+            reader.readAsArrayBuffer(file);
+        }
+    </script>
+</body>
+</html>

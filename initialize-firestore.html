@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Initialize Firestore Database</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.3s;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+            transition: transform 0.2s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .log {
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+        }
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 8px;
+            border-radius: 5px;
+        }
+        .log-entry.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .log-entry.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .log-entry.info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        .instructions {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin-bottom: 25px;
+            border-radius: 5px;
+        }
+        .instructions h3 {
+            color: #856404;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        .instructions p {
+            color: #856404;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔥 Initialize Firestore Database</h1>
+        <p class="subtitle">Set up your PSS Loading Data Management System</p>
+
+        <div class="instructions">
+            <h3>📋 Instructions:</h3>
+            <p>
+                1. Enter your admin phone number (10 digits)<br>
+                2. Enter your full name<br>
+                3. Click "Initialize Database"<br>
+                4. Wait for all data to be created<br>
+                5. Login to the main app with your phone number
+            </p>
+        </div>
+
+        <div class="input-group">
+            <label for="adminPhone">👤 Admin Phone Number (10 digits):</label>
+            <input type="tel" id="adminPhone" placeholder="9876543210" maxlength="10" pattern="[0-9]{10}">
+        </div>
+
+        <div class="input-group">
+            <label for="adminName">📝 Admin Full Name:</label>
+            <input type="text" id="adminName" placeholder="Raja Patel">
+        </div>
+
+        <button class="btn" id="initBtn" onclick="initializeDatabase()">
+            🚀 Initialize Database
+        </button>
+
+        <div class="log" id="log"></div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    
+    <!-- Firebase Config -->
+    <script src="public/js/firebase-config.js"></script>
+
+    <script>
+        const logDiv = document.getElementById('log');
+        const initBtn = document.getElementById('initBtn');
+
+        function log(message, type = 'info') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        async function initializeDatabase() {
+            const adminPhone = document.getElementById('adminPhone').value.trim();
+            const adminName = document.getElementById('adminName').value.trim();
+
+            // Validation
+            if (!adminPhone || adminPhone.length !== 10 || !/^\d{10}$/.test(adminPhone)) {
+                alert('Please enter a valid 10-digit phone number');
+                return;
+            }
+
+            if (!adminName) {
+                alert('Please enter your full name');
+                return;
+            }
+
+            initBtn.disabled = true;
+            initBtn.textContent = '⏳ Initializing...';
+            logDiv.innerHTML = '';
+
+            try {
+                log('🔥 Starting Firestore initialization...', 'info');
+
+                // 1. Create Admin User
+                log('Creating admin user...', 'info');
+                await db.collection('users').doc(adminPhone).set({
+                    phone: adminPhone,
+                    name: adminName,
+                    role: 'admin',
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    isActive: true
+                });
+                log(`✅ Admin user created: ${adminName} (${adminPhone})`, 'success');
+
+                // 2. Create Test Staff User
+                log('Creating test staff user...', 'info');
+                await db.collection('users').doc('9999999999').set({
+                    phone: '9999999999',
+                    name: 'Test Staff User',
+                    role: 'staff',
+                    pssStation: 'AMRELI',
+                    names: ['John Smith', 'Jane Doe', 'Mike Johnson'],
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    isActive: true
+                });
+                log('✅ Test staff user created: 9999999999', 'success');
+
+                // 3. Create PSS Stations
+                log('Creating PSS stations...', 'info');
+                const pssStations = [
+                    { name: 'AMRELI', code: 'AMR', voltage: '33/11 kV', feeders: 6, location: 'Amreli District' },
+                    { name: 'BABRA', code: 'BBR', voltage: '33/11 kV', feeders: 6, location: 'Babra' },
+                    { name: 'BAGASARA', code: 'BGS', voltage: '33/11 kV', feeders: 6, location: 'Bagasara' },
+                    { name: 'CHALALA', code: 'CHL', voltage: '33/11 kV', feeders: 6, location: 'Chalala' },
+                    { name: 'DAMNAGAR', code: 'DMN', voltage: '33/11 kV', feeders: 6, location: 'Damnagar' },
+                    { name: 'DHARI', code: 'DHR', voltage: '33/11 kV', feeders: 6, location: 'Dhari' },
+                    { name: 'JAFRABAD', code: 'JFB', voltage: '33/11 kV', feeders: 6, location: 'Jafrabad' },
+                    { name: 'KHAMBHA', code: 'KMB', voltage: '33/11 kV', feeders: 6, location: 'Khambha' },
+                    { name: 'KUNKAVAV', code: 'KNK', voltage: '33/11 kV', feeders: 6, location: 'Kunkavav' },
+                    { name: 'LATHI', code: 'LTH', voltage: '33/11 kV', feeders: 6, location: 'Lathi' },
+                    { name: 'LILIYA', code: 'LLY', voltage: '33/11 kV', feeders: 6, location: 'Liliya' },
+                    { name: 'RAJULA', code: 'RJL', voltage: '33/11 kV', feeders: 6, location: 'Rajula' },
+                    { name: 'SAVARKUNDLA', code: 'SVK', voltage: '33/11 kV', feeders: 6, location: 'Savarkundla' }
+                ];
+
+                for (const station of pssStations) {
+                    await db.collection('pss_stations').add({
+                        ...station,
+                        isActive: true,
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+                    log(`✅ PSS Station created: ${station.name}`, 'success');
+                }
+
+                // 4. Create sample entry for today
+                log('Creating sample data entry...', 'info');
+                const today = new Date();
+                const dateStr = today.toISOString().split('T')[0];
+                
+                await db.collection('daily_entries').add({
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                    date: dateStr,
+                    pssStation: 'AMRELI',
+                    personnelName: adminName,
+                    submittedBy: adminPhone,
+                    submittedAt: firebase.firestore.FieldValue.serverTimestamp(),
+                    
+                    // I/C-1 33kV
+                    ic1_33kv_voltage_r: 33.5,
+                    ic1_33kv_voltage_y: 33.4,
+                    ic1_33kv_voltage_b: 33.6,
+                    ic1_33kv_amp_r: 125.5,
+                    ic1_33kv_amp_y: 130.2,
+                    ic1_33kv_amp_b: 128.8,
+                    ic1_33kv_mw: 8.5,
+                    ic1_33kv_mvar: 2.3,
+                    
+                    // I/C-2 33kV
+                    ic2_33kv_voltage_r: 33.3,
+                    ic2_33kv_voltage_y: 33.5,
+                    ic2_33kv_voltage_b: 33.4,
+                    ic2_33kv_amp_r: 115.3,
+                    ic2_33kv_amp_y: 120.5,
+                    ic2_33kv_amp_b: 118.2,
+                    ic2_33kv_mw: 7.8,
+                    ic2_33kv_mvar: 2.1,
+                    
+                    // PTR-1 33kV
+                    ptr1_33kv_voltage_r: 33.2,
+                    ptr1_33kv_voltage_y: 33.4,
+                    ptr1_33kv_voltage_b: 33.3,
+                    ptr1_33kv_amp_r: 95.5,
+                    ptr1_33kv_amp_y: 98.2,
+                    ptr1_33kv_amp_b: 96.8,
+                    ptr1_33kv_mw: 6.5,
+                    ptr1_33kv_mvar: 1.8,
+                    
+                    // PTR-2 33kV
+                    ptr2_33kv_voltage_r: 33.4,
+                    ptr2_33kv_voltage_y: 33.3,
+                    ptr2_33kv_voltage_b: 33.5,
+                    ptr2_33kv_amp_r: 88.3,
+                    ptr2_33kv_amp_y: 90.5,
+                    ptr2_33kv_amp_b: 89.2,
+                    ptr2_33kv_mw: 6.0,
+                    ptr2_33kv_mvar: 1.6,
+                    
+                    // PTR-1 11kV
+                    ptr1_11kv_voltage_r: 11.2,
+                    ptr1_11kv_voltage_y: 11.1,
+                    ptr1_11kv_voltage_b: 11.3,
+                    ptr1_11kv_amp_r: 145.5,
+                    ptr1_11kv_amp_y: 148.2,
+                    ptr1_11kv_amp_b: 146.8,
+                    ptr1_11kv_mw: 2.8,
+                    ptr1_11kv_mvar: 0.8,
+                    
+                    // PTR-2 11kV
+                    ptr2_11kv_voltage_r: 11.1,
+                    ptr2_11kv_voltage_y: 11.2,
+                    ptr2_11kv_voltage_b: 11.1,
+                    ptr2_11kv_amp_r: 138.3,
+                    ptr2_11kv_amp_y: 140.5,
+                    ptr2_11kv_amp_b: 139.2,
+                    ptr2_11kv_mw: 2.6,
+                    ptr2_11kv_mvar: 0.7,
+                    
+                    // Feeder 1
+                    feeder1_voltage_r: 11.0,
+                    feeder1_voltage_y: 11.1,
+                    feeder1_voltage_b: 11.0,
+                    feeder1_amp_r: 45.5,
+                    feeder1_amp_y: 48.2,
+                    feeder1_amp_b: 46.8,
+                    feeder1_mw: 0.9,
+                    feeder1_mvar: 0.3,
+                    
+                    // Feeder 2
+                    feeder2_voltage_r: 11.1,
+                    feeder2_voltage_y: 11.0,
+                    feeder2_voltage_b: 11.1,
+                    feeder2_amp_r: 52.3,
+                    feeder2_amp_y: 54.5,
+                    feeder2_amp_b: 53.2,
+                    feeder2_mw: 1.0,
+                    feeder2_mvar: 0.3,
+                    
+                    // Feeder 3
+                    feeder3_voltage_r: 11.0,
+                    feeder3_voltage_y: 11.1,
+                    feeder3_voltage_b: 11.0,
+                    feeder3_amp_r: 38.5,
+                    feeder3_amp_y: 40.2,
+                    feeder3_amp_b: 39.8,
+                    feeder3_mw: 0.8,
+                    feeder3_mvar: 0.2,
+                    
+                    // Feeder 4
+                    feeder4_voltage_r: 11.1,
+                    feeder4_voltage_y: 11.0,
+                    feeder4_voltage_b: 11.1,
+                    feeder4_amp_r: 42.3,
+                    feeder4_amp_y: 44.5,
+                    feeder4_amp_b: 43.2,
+                    feeder4_mw: 0.9,
+                    feeder4_mvar: 0.2,
+                    
+                    // Feeder 5
+                    feeder5_voltage_r: 11.0,
+                    feeder5_voltage_y: 11.1,
+                    feeder5_voltage_b: 11.0,
+                    feeder5_amp_r: 35.5,
+                    feeder5_amp_y: 37.2,
+                    feeder5_amp_b: 36.8,
+                    feeder5_mw: 0.7,
+                    feeder5_mvar: 0.2,
+                    
+                    // Feeder 6
+                    feeder6_voltage_r: 11.1,
+                    feeder6_voltage_y: 11.0,
+                    feeder6_voltage_b: 11.1,
+                    feeder6_amp_r: 48.3,
+                    feeder6_amp_y: 50.5,
+                    feeder6_amp_b: 49.2,
+                    feeder6_mw: 1.0,
+                    feeder6_mvar: 0.3,
+                    
+                    // Station Transformer
+                    station_transformer_voltage_r: 0.415,
+                    station_transformer_voltage_y: 0.415,
+                    station_transformer_voltage_b: 0.415,
+                    station_transformer_amp_r: 25.5,
+                    station_transformer_amp_y: 26.2,
+                    station_transformer_amp_b: 25.8,
+                    station_transformer_mw: 0.018,
+                    station_transformer_mvar: 0.006,
+                    
+                    // Charger
+                    charger_voltage_r: 220.0,
+                    charger_voltage_y: 220.0,
+                    charger_voltage_b: 220.0,
+                    charger_amp_r: 15.5,
+                    charger_amp_y: 15.2,
+                    charger_amp_b: 15.8,
+                    charger_mw: 0.010,
+                    charger_mvar: 0.003,
+                    
+                    isEditable: true,
+                    editedAt: null
+                });
+                log('✅ Sample data entry created for today', 'success');
+
+                // 5. Create indexes log
+                log('Creating admin logs collection...', 'info');
+                await db.collection('admin_logs').add({
+                    action: 'database_initialized',
+                    performedBy: adminPhone,
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                    details: {
+                        adminName: adminName,
+                        adminPhone: adminPhone,
+                        pssStationsCount: pssStations.length,
+                        testUsersCreated: 2
+                    }
+                });
+                log('✅ Admin logs collection created', 'success');
+
+                log('', 'info');
+                log('🎉 DATABASE INITIALIZATION COMPLETE!', 'success');
+                log('', 'info');
+                log('📱 Login Credentials:', 'info');
+                log(`   Admin Phone: ${adminPhone}`, 'success');
+                log(`   Admin Name: ${adminName}`, 'success');
+                log(`   Test Staff Phone: 9999999999`, 'success');
+                log('', 'info');
+                log('🚀 Next Steps:', 'info');
+                log('1. Deploy: firebase deploy', 'info');
+                log('2. Open the main app', 'info');
+                log(`3. Login with: ${adminPhone}`, 'info');
+                log('4. You should see the Admin Dashboard!', 'info');
+
+                initBtn.textContent = '✅ Initialization Complete!';
+                initBtn.style.background = '#28a745';
+
+            } catch (error) {
+                log(`❌ ERROR: ${error.message}`, 'error');
+                console.error('Initialization error:', error);
+                initBtn.disabled = false;
+                initBtn.textContent = '🔄 Try Again';
+            }
+        }
+    </script>
+</body>
+</html>
