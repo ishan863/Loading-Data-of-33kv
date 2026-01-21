@@ -10,6 +10,9 @@ const adminState = {
     rowsPerPage: 25,
     allSubmissions: [],
     filteredSubmissions: [],
+    aiSubmissions: [],
+    aiDataLoaded: false,
+    aiInitialized: false,
     users: [],
     pssStations: [],
     charts: {}
@@ -170,6 +173,8 @@ function showAdminWindow(windowName) {
     let tabId = '';
     if (windowName === 'analytics') {
         tabId = 'analyticsTab';
+    } else if (windowName === 'reports') {
+        tabId = 'reportsTab';
     } else if (windowName === 'ai-assistant') {
         tabId = 'ai-assistantTab';
     } else {
@@ -195,6 +200,20 @@ function showAdminWindow(windowName) {
         case 'analytics':
             loadAnalyticsWindow();
             break;
+        case 'ai-assistant':
+            if (!adminState.aiInitialized && typeof window.initializeChatbot === 'function') {
+                window.initializeChatbot();
+                adminState.aiInitialized = true;
+            }
+            // Always update data context when AI tab is opened
+            if (typeof window.updateDataContext === 'function') {
+                const dataForAI = adminState.aiSubmissions.length > 0 ? adminState.aiSubmissions : adminState.allSubmissions;
+                if (dataForAI && dataForAI.length > 0) {
+                    window.updateDataContext(dataForAI);
+                    console.log('🤖 AI data context refreshed:', dataForAI.length, 'records');
+                }
+            }
+            break;
         case 'settings':
             loadSettingsWindow();
             break;
@@ -209,7 +228,7 @@ async function loadOverviewWindow() {
     console.log('Loading overview window...');
     
     // Load data first if not loaded
-    if (allSubmissionsData.length === 0) {
+    if (adminState.allSubmissions.length === 0) {
         await loadAllSubmissions();
     }
     
@@ -217,7 +236,7 @@ async function loadOverviewWindow() {
     await updateOverviewStats();
     
     // Display table data
-    displayFilteredData(allSubmissionsData);
+    displayFilteredData(adminState.allSubmissions);
 }
 
 async function updateOverviewStats() {
@@ -225,16 +244,16 @@ async function updateOverviewStats() {
         const today = new Date().toISOString().split('T')[0];
         
         // Count unique users
-        const uniqueUsers = new Set(allSubmissionsData.map(s => s.phoneNumber)).size;
+        const uniqueUsers = new Set(adminState.allSubmissions.map(s => s.phoneNumber)).size;
         
         // Count unique PSS stations
-        const uniquePSS = new Set(allSubmissionsData.map(s => s.pssStation)).size;
+        const uniquePSS = new Set(adminState.allSubmissions.map(s => s.pssStation)).size;
         
         // Total entries
-        const totalEntries = allSubmissionsData.length;
+        const totalEntries = adminState.allSubmissions.length;
         
         // Today's entries
-        const todayEntries = allSubmissionsData.filter(s => s.date === today).length;
+        const todayEntries = adminState.allSubmissions.filter(s => s.date === today).length;
         
         // Update stat cards
         const totalUsersEl = document.getElementById('totalUsersCount');
@@ -462,13 +481,13 @@ function renderDataTable() {
                 <td>
                     <div class="table-actions">
                         <button class="btn-table-action btn-view" onclick="viewSubmission('${submission.id}')">
-                            👁️ View
+                            &#128065; View
                         </button>
                         <button class="btn-table-action btn-edit" onclick="editSubmission('${submission.id}')">
-                            ✏️ Edit
+                            &#9999; Edit
                         </button>
                         <button class="btn-table-action btn-delete" onclick="deleteSubmission('${submission.id}')">
-                            🗑️ Delete
+                            &#128465; Delete
                         </button>
                     </div>
                 </td>
@@ -525,27 +544,151 @@ async function editSubmission(submissionId) {
 }
 
 async function deleteSubmission(submissionId) {
-    if (!confirm('Are you sure you want to delete this submission? This action cannot be undone.')) {
+    if (!confirm('⚠️ Are you sure you want to delete this submission?\n\nThis will permanently remove:\n• All submission data\n• I/C readings\n• PTR readings\n• Feeder data\n• Equipment data\n\nThis action CANNOT be undone!')) {
         return;
     }
     
     try {
-        await db.collection('daily_entries').doc(submissionId).delete();
+        console.log('🗑️ Deleting submission:', submissionId);
         
-        // Remove from state
+        // Delete from Firebase
+        await db.collection('daily_entries').doc(submissionId).delete();
+        console.log('✅ Deleted from Firebase');
+        
+        // Remove from adminState arrays
+        const beforeCount = adminState.allSubmissions.length;
         adminState.allSubmissions = adminState.allSubmissions.filter(s => s.id !== submissionId);
         adminState.filteredSubmissions = adminState.filteredSubmissions.filter(s => s.id !== submissionId);
+        console.log(`✅ Removed from state (${beforeCount} → ${adminState.allSubmissions.length})`);
         
-        // Refresh table
-        renderDataTable();
+        // Update chatbot context with updated data
+        if (typeof updateDataContext === 'function') {
+            updateDataContext(adminState.allSubmissions);
+            console.log('✅ Updated chatbot context');
+        }
+        
+        // Refresh all views depending on current window
+        if (adminState.currentWindow === 'overview') {
+            updateOverviewStats();
+            loadRecentActivity();
+            console.log('✅ Refreshed Overview window');
+        } else if (adminState.currentWindow === 'view') {
+            renderDataTable();
+            console.log('✅ Refreshed View window');
+        } else if (adminState.currentWindow === 'viewAll') {
+            filterViewAllData();
+            console.log('✅ Refreshed View All window');
+        } else if (adminState.currentWindow === 'analytics') {
+            renderAllNewAnalytics(adminState.allSubmissions);
+            console.log('✅ Refreshed Analytics window');
+        }
+        
+        // Log admin activity
+        await logAdminAction('delete_submission', { 
+            submissionId,
+            timestamp: new Date().toISOString(),
+            remainingCount: adminState.allSubmissions.length
+        });
+        
+        alert(`✅ Submission deleted successfully!\n\nRemaining submissions: ${adminState.allSubmissions.length}`);
+        console.log('✅ Delete operation completed');
+        
+    } catch (error) {
+        console.error('❌ Error deleting submission:', error);
+        alert('❌ Error deleting submission. Please try again.\n\nError: ' + error.message);
+    }
+}
+
+// ============================================
+// BULK DELETE FUNCTION (FOR TESTING/FRESH START)
+// ============================================
+
+async function deleteAllSubmissions() {
+    const confirmText = prompt(
+        '⚠️ DANGER: DELETE ALL SUBMISSIONS ⚠️\n\n' +
+        'This will permanently delete ALL ' + adminState.allSubmissions.length + ' submissions from the database!\n\n' +
+        'This action CANNOT be undone!\n\n' +
+        'Type "DELETE ALL DATA" to confirm:'
+    );
+    
+    if (confirmText !== 'DELETE ALL DATA') {
+        alert('❌ Deletion cancelled. Text did not match.');
+        return;
+    }
+    
+    try {
+        console.log('🗑️ Starting bulk delete of all submissions...');
+        const totalCount = adminState.allSubmissions.length;
+        let deletedCount = 0;
+        let failedCount = 0;
+        
+        // Show progress
+        alert(`🔄 Deleting ${totalCount} submissions...\n\nThis may take a moment. Click OK to start.`);
+        
+        // Delete in batches to avoid timeout
+        const batchSize = 10;
+        const submissions = [...adminState.allSubmissions]; // Create copy
+        
+        for (let i = 0; i < submissions.length; i += batchSize) {
+            const batch = submissions.slice(i, i + batchSize);
+            
+            await Promise.all(batch.map(async (submission) => {
+                try {
+                    await db.collection('daily_entries').doc(submission.id).delete();
+                    deletedCount++;
+                    console.log(`✅ Deleted ${deletedCount}/${totalCount}: ${submission.id}`);
+                } catch (error) {
+                    failedCount++;
+                    console.error(`❌ Failed to delete ${submission.id}:`, error);
+                }
+            }));
+            
+            // Small delay between batches
+            if (i + batchSize < submissions.length) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+        }
+        
+        // Clear all state
+        adminState.allSubmissions = [];
+        adminState.filteredSubmissions = [];
+        
+        // Update chatbot context
+        if (typeof updateDataContext === 'function') {
+            updateDataContext([]);
+        }
+        
+        // Refresh current view
+        if (adminState.currentWindow === 'overview') {
+            updateOverviewStats();
+            loadRecentActivity();
+        } else if (adminState.currentWindow === 'view') {
+            renderDataTable();
+        } else if (adminState.currentWindow === 'viewAll') {
+            filterViewAllData();
+        } else if (adminState.currentWindow === 'analytics') {
+            renderAllNewAnalytics([]);
+        }
         
         // Log activity
-        await logAdminAction('delete_submission', { submissionId });
+        await logAdminAction('bulk_delete_all', { 
+            totalDeleted: deletedCount,
+            failed: failedCount,
+            timestamp: new Date().toISOString()
+        });
         
-        alert('Submission deleted successfully!');
+        alert(
+            `✅ Bulk Delete Complete!\n\n` +
+            `✓ Deleted: ${deletedCount}\n` +
+            `${failedCount > 0 ? `✗ Failed: ${failedCount}\n` : ''}` +
+            `\nDatabase is now empty. Ready for fresh start!`
+        );
+        
+        console.log(`✅ Bulk delete completed: ${deletedCount} deleted, ${failedCount} failed`);
+        
     } catch (error) {
-        console.error('Error deleting submission:', error);
-        alert('Error deleting submission. Please try again.');
+        console.error('❌ Error in bulk delete:', error);
+        alert('❌ Error during bulk delete: ' + error.message);
     }
 }
 
@@ -564,18 +707,18 @@ function setupAnalyticsEvents() {
 }
 
 async function loadAnalyticsWindow() {
-    console.log('🎯 Loading NEW Comprehensive Analytics Dashboard...');
+    console.log('📊 Loading NEW Comprehensive Analytics Dashboard...');
     
-    if (allSubmissionsData.length === 0) {
+    if (adminState.allSubmissions.length === 0) {
         await loadAllSubmissions();
     }
     
     // Use new comprehensive dashboard if available
     if (typeof renderAllNewAnalytics === 'function') {
-        console.log('✅ Using NEW dashboard with all sections and KPIs');
-        await renderAllNewAnalytics(allSubmissionsData);
+        console.log('? Using NEW dashboard with all sections and KPIs');
+        await renderAllNewAnalytics(adminState.allSubmissions);
     } else {
-        console.warn('⚠️ New dashboard not loaded, using legacy charts');
+        console.warn('📊 New dashboard not loaded, using legacy charts');
         // Fallback to old charts
         renderICLoadChart();
         renderICVoltageChart();
@@ -607,7 +750,7 @@ function renderICLoadChart() {
     
     // Collect I/C data by date
     const dateData = {};
-    allSubmissionsData.forEach(entry => {
+    adminState.allSubmissions.forEach(entry => {
         const date = entry.date;
         if (!dateData[date]) {
             dateData[date] = { ic1Max: [], ic1Min: [], ic2Max: [], ic2Min: [] };
@@ -771,7 +914,7 @@ function renderICVoltageChart() {
     
     // Collect voltage data
     const dateData = {};
-    allSubmissionsData.forEach(entry => {
+    adminState.allSubmissions.forEach(entry => {
         const date = entry.date;
         if (!dateData[date]) {
             dateData[date] = { ic1Max: [], ic1Min: [], ic2Max: [], ic2Min: [] };
@@ -926,7 +1069,7 @@ function renderPTR33LoadChart() {
     
     // Collect PTR 33kV data
     const dateData = {};
-    allSubmissionsData.forEach(entry => {
+    adminState.allSubmissions.forEach(entry => {
         const date = entry.date;
         if (!dateData[date]) {
             dateData[date] = { ptr1Max: [], ptr1Min: [], ptr2Max: [], ptr2Min: [] };
@@ -1067,7 +1210,7 @@ function renderPTR11LoadChart() {
     
     // Collect PTR 11kV data
     const dateData = {};
-    allSubmissionsData.forEach(entry => {
+    adminState.allSubmissions.forEach(entry => {
         const date = entry.date;
         if (!dateData[date]) {
             dateData[date] = { ptr1Max: [], ptr1Min: [], ptr2Max: [], ptr2Min: [] };
@@ -1208,7 +1351,7 @@ function renderFeederLoadChart() {
     
     // Collect all feeder data by date
     const dateData = {};
-    allSubmissionsData.forEach(entry => {
+    adminState.allSubmissions.forEach(entry => {
         const date = entry.date;
         if (!dateData[date]) {
             dateData[date] = { maxLoads: [], minLoads: [] };
@@ -1339,7 +1482,7 @@ function renderFeederVoltageChart() {
         'Above 12kV': 0
     };
     
-    allSubmissionsData.forEach(entry => {
+    adminState.allSubmissions.forEach(entry => {
         if (entry.feeders) {
             Object.values(entry.feeders).forEach(feeder => {
                 const maxV = parseFloat(feeder.maxVoltage || 0);
@@ -1437,7 +1580,7 @@ function renderPeakTimeChart() {
     // Collect peak times
     const hourCounts = Array(24).fill(0);
     
-    allSubmissionsData.forEach(entry => {
+    adminState.allSubmissions.forEach(entry => {
         // I/C times
         [entry.ic1, entry.ic2].forEach(ic => {
             if (ic?.maxLoadTime) {
@@ -1528,7 +1671,7 @@ function renderDailyLoadTrendChart() {
     
     // Calculate daily total loads
     const dateLoads = {};
-    allSubmissionsData.forEach(entry => {
+    adminState.allSubmissions.forEach(entry => {
         const date = entry.date;
         if (!dateLoads[date]) {
             dateLoads[date] = 0;
@@ -1676,7 +1819,7 @@ function renderVoltageComplianceChart() {
         'Feeders 11kV': { inRange: 0, outRange: 0, nominal: 11, tolerance: 0.55 }
     };
     
-    allSubmissionsData.forEach(entry => {
+    adminState.allSubmissions.forEach(entry => {
         // I/C
         [entry.ic1, entry.ic2].forEach(ic => {
             if (ic) {
@@ -1787,7 +1930,7 @@ function renderPSSComparisonChart() {
     
     // Calculate total loads by PSS
     const pssData = {};
-    allSubmissionsData.forEach(entry => {
+    adminState.allSubmissions.forEach(entry => {
         const pss = entry.pssStation;
         if (!pssData[pss]) {
             pssData[pss] = { totalLoad: 0, count: 0 };
@@ -1877,7 +2020,7 @@ function renderSummaryStats() {
     if (!container) return;
     
     // Calculate comprehensive stats
-    let totalEntries = allSubmissionsData.length;
+    let totalEntries = adminState.allSubmissions.length;
     let totalICReadings = 0;
     let totalPTRReadings = 0;
     let totalFeederReadings = 0;
@@ -1885,7 +2028,7 @@ function renderSummaryStats() {
     let peakPSS = '';
     let peakDate = '';
     
-    allSubmissionsData.forEach(entry => {
+    adminState.allSubmissions.forEach(entry => {
         let entryLoad = 0;
         
         if (entry.ic1 || entry.ic2) totalICReadings++;
@@ -1911,11 +2054,11 @@ function renderSummaryStats() {
     
     const stats = [
         { label: 'Total Entries', value: totalEntries, icon: '📊', color: '#3b82f6' },
-        { label: 'I/C Readings', value: totalICReadings, icon: '⚡', color: '#ef4444' },
-        { label: 'PTR Readings', value: totalPTRReadings, icon: '🔄', color: '#10b981' },
-        { label: 'Feeder Readings', value: totalFeederReadings, icon: '📡', color: '#f59e0b' },
-        { label: 'Peak Load', value: `${Math.round(peakLoad)} A`, icon: '📈', color: '#8b5cf6' },
-        { label: 'Peak PSS', value: peakPSS.substring(0, 12), icon: '🏆', color: '#ec4899' }
+        { label: 'I/C Readings', value: totalICReadings, icon: '?', color: '#ef4444' },
+        { label: 'PTR Readings', value: totalPTRReadings, icon: '📊', color: '#10b981' },
+        { label: 'Feeder Readings', value: totalFeederReadings, icon: '📊', color: '#f59e0b' },
+        { label: 'Peak Load', value: `${Math.round(peakLoad)} A`, icon: '📊', color: '#8b5cf6' },
+        { label: 'Peak PSS', value: peakPSS.substring(0, 12), icon: '📊', color: '#ec4899' }
     ];
     
     let html = stats.map(stat => `
@@ -1931,13 +2074,13 @@ function renderSummaryStats() {
 
 // Refresh analytics
 function refreshAnalytics() {
-    console.log('🔄 Refreshing analytics...');
+    console.log('📊 Refreshing analytics...');
     loadAnalyticsWindow();
 }
 
 // Initialize analytics when data loads
 function initializeAnalytics() {
-    if (allSubmissionsData.length > 0) {
+    if (adminState.allSubmissions.length > 0) {
         loadAnalyticsWindow();
     }
 }
@@ -2049,7 +2192,7 @@ function setupSettingsEvents() {
     // Trend indicator
     if (counts.length >= 2) {
         const trend = counts[counts.length - 1] - counts[counts.length - 2];
-        const trendText = trend > 0 ? `↗ +${trend}` : trend < 0 ? `↘ ${trend}` : '→ 0';
+        const trendText = trend > 0 ? `? +${trend}` : trend < 0 ? `? ${trend}` : '? 0';
         const trendColor = trend > 0 ? '#10b981' : trend < 0 ? '#ef4444' : '#f59e0b';
         
         ctx.fillStyle = trendColor;
@@ -2070,7 +2213,7 @@ function renderPSSChart() {
     
     // Group submissions by PSS
     const pssGroups = {};
-    allSubmissionsData.forEach(entry => {
+    adminState.allSubmissions.forEach(entry => {
         const pss = entry.pssStation;
         if (!pssGroups[pss]) {
             pssGroups[pss] = 0;
@@ -2154,7 +2297,7 @@ function renderPSSChart() {
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
     ctx.font = 'bold 13px Inter';
     ctx.textAlign = 'left';
-    ctx.fillText('🏢 Top Performing PSS Stations', padding.left, 20);
+    ctx.fillText('📊 Top Performing PSS Stations', padding.left, 20);
     
     // Total count
     const totalCount = sortedPSS.reduce((sum, p) => sum + p[1], 0);
@@ -2176,7 +2319,7 @@ function renderLoadFactorChart() {
     
     // Calculate load factors
     const loadFactors = [];
-    allSubmissionsData.forEach(entry => {
+    adminState.allSubmissions.forEach(entry => {
         let maxLoad = 0;
         let minLoad = 0;
         
@@ -2268,7 +2411,7 @@ function renderVoltageStatsChart() {
     // Collect voltage data
     const voltages = { ic: [], ptr33: [], ptr11: [] };
     
-    allSubmissionsData.forEach(entry => {
+    adminState.allSubmissions.forEach(entry => {
         if (entry.ic1) {
             voltages.ic.push(parseFloat(entry.ic1.maxVoltage || 0));
             voltages.ic.push(parseFloat(entry.ic1.minVoltage || 0));
@@ -2357,7 +2500,7 @@ function renderVoltageStatsChart() {
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
     ctx.font = 'bold 12px Inter';
     ctx.textAlign = 'left';
-    ctx.fillText('⚡ Average Voltage Levels', padding.left, 20);
+    ctx.fillText('? Average Voltage Levels', padding.left, 20);
 }
 
 // ============================================
@@ -2376,7 +2519,7 @@ function renderTimelineChart() {
         hourGroups[i] = 0;
     }
     
-    allSubmissionsData.forEach(entry => {
+    adminState.allSubmissions.forEach(entry => {
         if (entry.timestamp) {
             const date = entry.timestamp.toDate ? entry.timestamp.toDate() : new Date(entry.timestamp);
             const hour = date.getHours();
@@ -2426,7 +2569,7 @@ function renderTimelineChart() {
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
     ctx.font = 'bold 12px Inter';
     ctx.textAlign = 'left';
-    ctx.fillText('⏰ Submissions by Hour', padding.left, 20);
+    ctx.fillText('? Submissions by Hour', padding.left, 20);
     
     // Peak hour
     const peakHour = Object.entries(hourGroups).reduce((a, b) => a[1] > b[1] ? a : b);
@@ -2447,7 +2590,7 @@ function renderTopContributors() {
     const staffGroups = {};
     const staffDetails = {};
     
-    allSubmissionsData.forEach(entry => {
+    adminState.allSubmissions.forEach(entry => {
         const staff = entry.staffName;
         if (!staffGroups[staff]) {
             staffGroups[staff] = 0;
@@ -2540,7 +2683,7 @@ function renderTopContributors() {
                 <!-- Performance Badge -->
                 ${i === 0 ? `
                     <div style="margin-top: 0.75rem; padding: 0.5rem; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); border-radius: 6px; text-align: center; font-weight: 700; color: #1a1a1a; font-size: 11px;">
-                        🏆 TOP PERFORMER
+                        📊 TOP PERFORMER
                     </div>
                 ` : ''}
             </div>
@@ -2561,12 +2704,12 @@ function renderTopContributors() {
             </div>
             <div style="width: 1px; height: 40px; background: rgba(255,255,255,0.2);"></div>
             <div style="text-align: center;">
-                <div style="font-size: 28px; font-weight: 700; color: #10b981;">${allSubmissionsData.length}</div>
+                <div style="font-size: 28px; font-weight: 700; color: #10b981;">${adminState.allSubmissions.length}</div>
                 <div style="font-size: 12px; color: rgba(255,255,255,0.6);">Total Submissions</div>
             </div>
             <div style="width: 1px; height: 40px; background: rgba(255,255,255,0.2);"></div>
             <div style="text-align: center;">
-                <div style="font-size: 28px; font-weight: 700; color: #f59e0b;">${(allSubmissionsData.length / totalStaff).toFixed(1)}</div>
+                <div style="font-size: 28px; font-weight: 700; color: #f59e0b;">${(adminState.allSubmissions.length / totalStaff).toFixed(1)}</div>
                 <div style="font-size: 12px; color: rgba(255,255,255,0.6);">Avg per Staff</div>
             </div>
         </div>
@@ -2700,12 +2843,35 @@ function startRealTimeListeners() {
                         adminState.allSubmissions.unshift(newSubmission);
                         adminState.filteredSubmissions.unshift(newSubmission);
                         
+                        // Keep AI dataset updated if loaded
+                        if (adminState.aiDataLoaded && !adminState.aiSubmissions.find(s => s.id === newSubmission.id)) {
+                            adminState.aiSubmissions.unshift(newSubmission);
+                        }
+                        
+                        console.log('? New submission received:', newSubmission.id, 'Total:', adminState.allSubmissions.length);
+                        
+                        // Update chatbot context with latest data
+                        if (typeof updateDataContext === 'function') {
+                            const dataForAI = adminState.aiDataLoaded ? adminState.aiSubmissions : adminState.allSubmissions;
+                            updateDataContext(dataForAI);
+                        }
+                        
                         // Refresh current window
                         if (adminState.currentWindow === 'overview') {
                             updateOverviewStats();
                             loadRecentActivity();
                         } else if (adminState.currentWindow === 'view') {
                             renderDataTable();
+                        } else if (adminState.currentWindow === 'viewAll') {
+                            // Refresh View All table if currently viewing it
+                            if (typeof renderExcelStyleTable === 'function') {
+                                filterViewAllData();
+                            }
+                        } else if (adminState.currentWindow === 'analytics') {
+                            // Refresh analytics if currently viewing
+                            if (typeof renderAllNewAnalytics === 'function') {
+                                renderAllNewAnalytics(adminState.allSubmissions);
+                            }
                         }
                         
                         // Show notification
@@ -2778,34 +2944,56 @@ window.deletePSS = deletePSS;
 // NEW ADMIN FEATURES
 // ============================================
 
-// Store all submissions data
-let allSubmissionsData = [];
-
 // Load all submissions for View tab
 async function loadAllSubmissions() {
     try {
-        const snapshot = await db.collection('daily_entries')
-            .orderBy('timestamp', 'desc')  // Sort by latest first
-            .limit(500)
-            .get();
+        console.log('📊 loadAllSubmissions - Starting data load...');
         
-        allSubmissionsData = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
+        // If adminState.allSubmissions already loaded, use it; otherwise load from Firebase
+        if (adminState.allSubmissions.length === 0) {
+            console.log('📊 Fetching submissions for UI (latest 500)...');
+            const snapshot = await db.collection('daily_entries')
+                .orderBy('timestamp', 'desc')
+                .limit(500)
+                .get();
+            
+            adminState.allSubmissions = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            
+            adminState.filteredSubmissions = [...adminState.allSubmissions];
+            console.log(`✅ Loaded ${adminState.allSubmissions.length} submissions for UI`);
+            
+            // Load full dataset for AI in background (does not block UI)
+            if (!adminState.aiDataLoaded) {
+                setTimeout(() => {
+                    loadAllSubmissionsForAI().catch(err => console.error('AI data load failed:', err));
+                }, 0);
+            }
+        } else {
+            console.log(`✅ Using cached data: ${adminState.allSubmissions.length} submissions`);
+        }
         
-        console.log('Loaded submissions:', allSubmissionsData.length, '(sorted by latest first)');
+        // Log latest 5 submissions for verification
+        if (adminState.allSubmissions.length > 0) {
+            console.log('📋 Latest 5 submissions:');
+            adminState.allSubmissions.slice(0, 5).forEach((sub, i) => {
+                console.log(`  ${i + 1}. ${sub.date} - ${sub.pssStation} - ${sub.staffName} (ID: ${sub.id.substring(0, 8)}...)`);
+            });
+        }
         
         // Update chatbot context if available
         if (typeof updateDataContext === 'function') {
-            updateDataContext(allSubmissionsData);
+            const dataForAI = adminState.aiDataLoaded ? adminState.aiSubmissions : adminState.allSubmissions;
+            updateDataContext(dataForAI);
             console.log('✅ Chatbot data context updated');
         }
         
         // Populate PSS filter dropdown
         const filterPSS = document.getElementById('filterPSS');
         if (filterPSS) {
-            const pssStations = [...new Set(allSubmissionsData.map(s => s.pssStation))].filter(Boolean).sort();
+            const pssStations = [...new Set(adminState.allSubmissions.map(s => s.pssStation))].filter(Boolean).sort();
             filterPSS.innerHTML = '<option value="">All PSS Stations</option>';
             pssStations.forEach(pss => {
                 filterPSS.innerHTML += `<option value="${pss}">${pss}</option>`;
@@ -2826,7 +3014,7 @@ async function loadAllSubmissions() {
         // Populate staff filter dropdown
         const filterStaff = document.getElementById('filterStaff');
         if (filterStaff) {
-            const staffNames = [...new Set(allSubmissionsData.map(s => s.staffName))].filter(Boolean).sort();
+            const staffNames = [...new Set(adminState.allSubmissions.map(s => s.staffName))].filter(Boolean).sort();
             filterStaff.innerHTML = '<option value="">All Staff</option>';
             staffNames.forEach(staff => {
                 filterStaff.innerHTML += `<option value="${staff}">${staff}</option>`;
@@ -2834,10 +3022,50 @@ async function loadAllSubmissions() {
         }
         
         // Display data
-        displayFilteredData(allSubmissionsData);
+        displayFilteredData(adminState.allSubmissions);
         
     } catch (error) {
         console.error('Error loading submissions:', error);
+    }
+}
+
+// Load full dataset for AI in background (no UI rendering)
+async function loadAllSubmissionsForAI() {
+    if (adminState.aiDataLoaded) return;
+    console.log('🤖 Loading ALL submissions for AI (paged)...');
+    const pageSize = 500;
+    let lastDoc = null;
+    let allDocs = [];
+    let page = 1;
+    
+    while (true) {
+        let query = db.collection('daily_entries')
+            .orderBy('timestamp', 'desc')
+            .limit(pageSize);
+        
+        if (lastDoc) {
+            query = query.startAfter(lastDoc);
+        }
+        
+        const snapshot = await query.get();
+        if (snapshot.empty) break;
+        
+        allDocs = allDocs.concat(snapshot.docs);
+        lastDoc = snapshot.docs[snapshot.docs.length - 1];
+        console.log(`🤖 AI data page ${page} (+${snapshot.size})`);
+        page += 1;
+    }
+    
+    adminState.aiSubmissions = allDocs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+    }));
+    adminState.aiDataLoaded = true;
+    console.log(`✅ AI dataset ready: ${adminState.aiSubmissions.length} records`);
+    
+    if (typeof updateDataContext === 'function') {
+        updateDataContext(adminState.aiSubmissions);
+        console.log('✅ Chatbot data context updated (full dataset)');
     }
 }
 
@@ -2848,7 +3076,7 @@ function filterData() {
     const filterToDate = document.getElementById('filterToDate')?.value || '';
     const filterStaff = document.getElementById('filterStaff')?.value || '';
     
-    let filtered = allSubmissionsData;
+    let filtered = adminState.allSubmissions;
     
     // Filter by PSS
     if (filterPSS) {
@@ -2880,11 +3108,11 @@ function updateStaffFilterByPSS(selectedPSS) {
     
     if (selectedPSS === '' || !selectedPSS) {
         // If no PSS selected, show all staff
-        staffNames = [...new Set(allSubmissionsData.map(s => s.staffName))].filter(Boolean).sort();
+        staffNames = [...new Set(adminState.allSubmissions.map(s => s.staffName))].filter(Boolean).sort();
     } else {
         // Filter staff by selected PSS
         staffNames = [...new Set(
-            allSubmissionsData
+            adminState.allSubmissions
                 .filter(s => s.pssStation === selectedPSS)
                 .map(s => s.staffName)
         )].filter(Boolean).sort();
@@ -2956,14 +3184,14 @@ function displayFilteredData(data) {
             currentBatch++;
             requestAnimationFrame(renderNextBatch);
         } else {
-            console.log(`✅ Displaying ${data.length} submissions in Overview`);
+            console.log(`? Displaying ${data.length} submissions in Overview`);
         }
     }
     
     if (batches.length > 1) {
         requestAnimationFrame(renderNextBatch);
     } else {
-        console.log(`✅ Displaying ${data.length} submissions in Overview`);
+        console.log(`? Displaying ${data.length} submissions in Overview`);
     }
 }
 
@@ -3012,7 +3240,7 @@ function renderDataBatch(batch) {
         // PTR Sections
         if (entry.ptr1_33kv || entry.ptr2_33kv || entry.ptr1_11kv || entry.ptr2_11kv) {
             dataDisplay += '<div style="margin-bottom: 10px; padding: 8px; background: rgba(34,197,94,0.1); border-left: 3px solid #22c55e; border-radius: 4px;">';
-            dataDisplay += '<strong style="color: #86efac; font-size: 12px;">🔄 PTR SECTIONS</strong><br/>';
+            dataDisplay += '<strong style="color: #86efac; font-size: 12px;">📊 PTR SECTIONS</strong><br/>';
             
             if (entry.ptr1_33kv) {
                 dataDisplay += `<div style="margin-top: 6px; padding-left: 8px; line-height: 1.6;">
@@ -3057,7 +3285,7 @@ function renderDataBatch(batch) {
         if (entry.feeders) {
             const feederCount = Object.keys(entry.feeders).length;
             dataDisplay += '<div style="margin-bottom: 10px; padding: 8px; background: rgba(59,130,246,0.1); border-left: 3px solid #3b82f6; border-radius: 4px;">';
-            dataDisplay += `<strong style="color: #60a5fa; font-size: 12px;">⚡ FEEDERS (${feederCount})</strong><br/>`;
+            dataDisplay += `<strong style="color: #60a5fa; font-size: 12px;">? FEEDERS (${feederCount})</strong><br/>`;
             Object.entries(entry.feeders).forEach(([name, feeder]) => {
                 dataDisplay += `<div style="margin-top: 6px; padding-left: 8px; line-height: 1.6;">
                     <strong style="color: #60a5fa;">${name}</strong> <span style="color: rgba(255,255,255,0.6); font-size: 10px;">[PTR ${feeder.ptrNo}]</span><br/>
@@ -3073,7 +3301,7 @@ function renderDataBatch(batch) {
         // Station Transformer
         if (entry.stationTransformer) {
             dataDisplay += '<div style="margin-bottom: 10px; padding: 8px; background: rgba(245,158,11,0.1); border-left: 3px solid #f59e0b; border-radius: 4px;">';
-            dataDisplay += '<strong style="color: #fcd34d; font-size: 12px;">🔋 STATION TRANSFORMER</strong><br/>';
+            dataDisplay += '<strong style="color: #fcd34d; font-size: 12px;">📊 STATION TRANSFORMER</strong><br/>';
             dataDisplay += `<div style="margin-top: 6px; padding-left: 8px; line-height: 1.6;">
                 <span style="color: rgba(255,255,255,0.9); font-size: 10px;">
                 Max: ${entry.stationTransformer.maxVoltage}KV @ ${entry.stationTransformer.maxVoltageTime}, ${entry.stationTransformer.maxLoad}A @ ${entry.stationTransformer.maxLoadTime}<br/>
@@ -3086,7 +3314,7 @@ function renderDataBatch(batch) {
         // Charger
         if (entry.charger) {
             dataDisplay += '<div style="margin-bottom: 10px; padding: 8px; background: rgba(168,85,247,0.1); border-left: 3px solid #a855f7; border-radius: 4px;">';
-            dataDisplay += '<strong style="color: #d8b4fe; font-size: 12px;">🔌 CHARGER</strong><br/>';
+            dataDisplay += '<strong style="color: #d8b4fe; font-size: 12px;">📊 CHARGER</strong><br/>';
             dataDisplay += `<div style="margin-top: 6px; padding-left: 8px; line-height: 1.6;">
                 <span style="color: rgba(255,255,255,0.6); font-size: 10px;">[PTR ${entry.charger.ptrNo}]</span><br/>
                 <span style="color: rgba(255,255,255,0.9); font-size: 10px;">
@@ -3115,14 +3343,14 @@ function renderDataBatch(batch) {
                     ${dataDisplay}
                 </td>
                 <td style="padding: 12px 10px;">
-                    <button class="btn-action" onclick="viewEntryDetails('${entry.id}')" style="background: #3b82f6; display: block; width: 100%; margin-bottom: 6px;">📋 View</button>
-                    <button class="btn-action" onclick="deleteEntry('${entry.id}')" style="background: #ef4444; display: block; width: 100%;">🗑️ Delete</button>
+                    <button class="btn-action" onclick="viewEntryDetails('${entry.id}')" style="background: #3b82f6; display: block; width: 100%; margin-bottom: 6px;">📊 View</button>
+                    <button class="btn-action" onclick="deleteEntry('${entry.id}')" style="background: #ef4444; display: block; width: 100%;">📊? Delete</button>
                 </td>
             </tr>
         `;
     }).join('');
     
-    console.log(`✅ Displaying ${data.length} comprehensive submissions in Overview`);
+    console.log(`? Displaying ${data.length} comprehensive submissions in Overview`);
 }
 
 // Export to Excel/CSV with all 127 columns
@@ -3131,7 +3359,7 @@ async function exportToExcel() {
         const filterPSS = document.getElementById('filterPSS')?.value || '';
         const filterDate = document.getElementById('filterDate')?.value || '';
         
-        let dataToExport = allSubmissionsData;
+        let dataToExport = adminState.allSubmissions;
         
         if (filterPSS) {
             dataToExport = dataToExport.filter(s => s.pssStation === filterPSS);
@@ -3313,17 +3541,17 @@ async function exportToExcel() {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
         
-        alert('✅ Data exported successfully as ' + filename);
+        alert('? Data exported successfully as ' + filename);
         
     } catch (error) {
         console.error('Export error:', error);
-        alert('❌ Error exporting data: ' + error.message);
+        alert('? Error exporting data: ' + error.message);
     }
 }
 
 // View entry details
 function viewEntryDetails(entryId) {
-    const entry = allSubmissionsData.find(e => e.id === entryId);
+    const entry = adminState.allSubmissions.find(e => e.id === entryId);
     if (!entry) {
         alert('Entry not found');
         return;
@@ -3507,33 +3735,33 @@ function viewEntryDetails(entryId) {
             <div class="modal-title-details">
                 📊 Entry Details
             </div>
-            <button class="close-modal-btn" onclick="document.getElementById('entryDetailsModal').remove()">✕</button>
+            <button class="close-modal-btn" onclick="document.getElementById('entryDetailsModal').remove()">\u2715</button>
         </div>
         
         <div class="submission-header">
             <div class="header-item">
-                <div class="header-icon">📅</div>
+                <div class="header-icon">📊</div>
                 <div class="header-content">
                     <strong>Date:</strong>
                     <span>${entry.date}</span>
                 </div>
             </div>
             <div class="header-item">
-                <div class="header-icon">📍</div>
+                <div class="header-icon">📊</div>
                 <div class="header-content">
                     <strong>PSS Station:</strong>
                     <span>${entry.pssStation}</span>
                 </div>
             </div>
             <div class="header-item">
-                <div class="header-icon">👤</div>
+                <div class="header-icon">📊</div>
                 <div class="header-content">
                     <strong>Staff:</strong>
                     <span>${entry.staffName}</span>
                 </div>
             </div>
             <div class="header-item">
-                <div class="header-icon">🕐</div>
+                <div class="header-icon">📊</div>
                 <div class="header-content">
                     <strong>Time:</strong>
                     <span>${entry.timestamp?.toDate?.()?.toLocaleTimeString() || 'N/A'}</span>
@@ -3547,7 +3775,7 @@ function viewEntryDetails(entryId) {
     if (entry.ic1 || entry.ic2) {
         html += `
             <div class="data-section">
-                <div class="section-title">⚡ INCOMING (I/C) DATA</div>
+                <div class="section-title">${String.fromCodePoint(0x26A1)} INCOMING (I/C) DATA</div>
                 <div class="cards-grid">`;
         
         if (entry.ic1) {
@@ -3600,17 +3828,21 @@ function viewEntryDetails(entryId) {
     }
     
     // PTR Sections
-    if (entry.ptr1_33kv || entry.ptr2_33kv || entry.ptr1_11kv || entry.ptr2_11kv) {
+    if (entry.ptr1_33kv || entry.ptr2_33kv || entry.ptr3_33kv || entry.ptr4_33kv || entry.ptr1_11kv || entry.ptr2_11kv || entry.ptr3_11kv || entry.ptr4_11kv) {
         html += `
             <div class="data-section">
-                <div class="section-title">🔄 PTR (POWER TRANSFORMER) DATA</div>
+                <div class="section-title">📊 PTR (POWER TRANSFORMER) DATA</div>
                 <div class="cards-grid">`;
         
         const ptrData = [
             { key: 'ptr1_33kv', title: 'PTR-1 (33kV)' },
             { key: 'ptr2_33kv', title: 'PTR-2 (33kV)' },
+            { key: 'ptr3_33kv', title: 'PTR-3 (33kV)' },
+            { key: 'ptr4_33kv', title: 'PTR-4 (33kV)' },
             { key: 'ptr1_11kv', title: 'PTR-1 (11kV)' },
-            { key: 'ptr2_11kv', title: 'PTR-2 (11kV)' }
+            { key: 'ptr2_11kv', title: 'PTR-2 (11kV)' },
+            { key: 'ptr3_11kv', title: 'PTR-3 (11kV)' },
+            { key: 'ptr4_11kv', title: 'PTR-4 (11kV)' }
         ];
         
         ptrData.forEach(ptr => {
@@ -3645,13 +3877,21 @@ function viewEntryDetails(entryId) {
     if (entry.feeders && Object.keys(entry.feeders).length > 0) {
         html += `
             <div class="data-section">
-                <div class="section-title">⚡ FEEDER DATA (${Object.keys(entry.feeders).length} Feeders)</div>
+                <div class="section-title">${String.fromCodePoint(0x1F50C)} FEEDER DATA (${Object.keys(entry.feeders).length} Feeders)</div>
                 <div class="cards-grid">`;
         
-        Object.entries(entry.feeders).forEach(([name, feeder]) => {
+        Object.entries(entry.feeders).forEach(([feederKey, feeder]) => {
+            // Handle if feeder.name is an object or string
+            let feederName;
+            if (typeof feeder.name === 'object' && feeder.name !== null) {
+                feederName = feeder.name.name || feederKey;
+            } else {
+                feederName = feeder.name || feederKey;
+            }
+            
             html += `
                 <div class="data-card">
-                    <div class="card-title">${name}</div>
+                    <div class="card-title">${String.fromCodePoint(0x1F50C)} ${feederName} (PTR ${feeder.ptrNo || 'N/A'})</div>
                     <div class="data-row">
                         <div class="data-label"><span class="indicator indicator-red"></span> Max Voltage:</div>
                         <div class="data-value">${feeder.maxVoltage || 0} kV @ ${feeder.maxVoltageTime || '--:--'}</div>
@@ -3678,7 +3918,7 @@ function viewEntryDetails(entryId) {
     if (entry.stationTransformer) {
         html += `
             <div class="data-section">
-                <div class="section-title">🔋 STATION TRANSFORMER</div>
+                <div class="section-title">📊 STATION TRANSFORMER</div>
                 <div class="cards-grid">
                     <div class="data-card">
                         <div class="card-title">Station Transformer</div>
@@ -3707,7 +3947,7 @@ function viewEntryDetails(entryId) {
     if (entry.charger) {
         html += `
             <div class="data-section">
-                <div class="section-title">🔌 CHARGER 48/24V</div>
+                <div class="section-title">📊 CHARGER 48/24V</div>
                 <div class="cards-grid">
                     <div class="data-card">
                         <div class="card-title">Charger (PTR ${entry.charger.ptrNo || 'N/A'})</div>
@@ -3752,11 +3992,11 @@ async function deleteEntry(entryId) {
     
     try {
         await db.collection('daily_entries').doc(entryId).delete();
-        alert('✅ Entry deleted successfully');
+        alert('? Entry deleted successfully');
         await loadAllSubmissions();
     } catch (error) {
         console.error('Delete error:', error);
-        alert('❌ Error deleting entry: ' + error.message);
+        alert('? Error deleting entry: ' + error.message);
     }
 }
 
@@ -3802,10 +4042,10 @@ async function backupDatabase() {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
         
-        alert(`✅ Database backup downloaded!\n\nBackup contains:\n- ${backup.stats.totalUsers} users\n- ${backup.stats.totalPSS} PSS stations\n- ${backup.stats.totalEntries} entries`);
+        alert(`? Database backup downloaded!\n\nBackup contains:\n- ${backup.stats.totalUsers} users\n- ${backup.stats.totalPSS} PSS stations\n- ${backup.stats.totalEntries} entries`);
     } catch (error) {
         console.error('Backup error:', error);
-        alert('❌ Error creating backup: ' + error.message);
+        alert('? Error creating backup: ' + error.message);
     }
 }
 
@@ -3819,7 +4059,7 @@ setTimeout(() => {
     if (viewTab) {
         viewTab.addEventListener('click', () => {
             setTimeout(() => {
-                if (allSubmissionsData.length === 0) {
+                if (adminState.allSubmissions.length === 0) {
                     loadAllSubmissions();
                 }
                 // Load Excel-style comprehensive view
@@ -3836,13 +4076,18 @@ setTimeout(() => {
 let viewAllFilteredData = [];
 
 async function loadViewAllExcelData() {
-    console.log('Loading View All - Master Excel Format...');
+    console.log('📊 Loading View All - Master Excel Format...');
+    console.log(`📊 Current adminState.allSubmissions count: ${adminState.allSubmissions.length}`);
     
-    if (allSubmissionsData.length === 0) {
+    if (adminState.allSubmissions.length === 0) {
+        console.log('📊 No data in adminState, loading from Firebase...');
         await loadAllSubmissions();
+    } else {
+        console.log('✅ Using existing adminState.allSubmissions data');
     }
     
-    viewAllFilteredData = [...allSubmissionsData];
+    viewAllFilteredData = [...adminState.allSubmissions];
+    console.log(`📊 View All will display ${viewAllFilteredData.length} records`);
     
     // Populate filter dropdowns for View All
     populateViewAllFilters();
@@ -3855,7 +4100,7 @@ function populateViewAllFilters() {
     // PSS Filter
     const viewPssFilter = document.getElementById('viewFilterPSS');
     if (viewPssFilter) {
-        const pssStations = [...new Set(allSubmissionsData.map(s => s.pssStation))].filter(Boolean).sort();
+        const pssStations = [...new Set(adminState.allSubmissions.map(s => s.pssStation))].filter(Boolean).sort();
         viewPssFilter.innerHTML = '<option value="">All PSS Stations</option>';
         pssStations.forEach(pss => {
             viewPssFilter.innerHTML += `<option value="${pss}">${pss}</option>`;
@@ -3870,7 +4115,7 @@ function populateViewAllFilters() {
     // Staff Filter
     const viewStaffFilter = document.getElementById('viewFilterStaff');
     if (viewStaffFilter) {
-        const staffNames = [...new Set(allSubmissionsData.map(s => s.staffName))].filter(Boolean).sort();
+        const staffNames = [...new Set(adminState.allSubmissions.map(s => s.staffName))].filter(Boolean).sort();
         viewStaffFilter.innerHTML = '<option value="">All Staff</option>';
         staffNames.forEach(staff => {
             viewStaffFilter.innerHTML += `<option value="${staff}">${staff}</option>`;
@@ -3887,11 +4132,11 @@ function updateViewStaffFilterByPSS(selectedPSS) {
     
     if (selectedPSS === '' || !selectedPSS) {
         // If no PSS selected, show all staff
-        staffNames = [...new Set(allSubmissionsData.map(s => s.staffName))].filter(Boolean).sort();
+        staffNames = [...new Set(adminState.allSubmissions.map(s => s.staffName))].filter(Boolean).sort();
     } else {
         // Filter staff by selected PSS
         staffNames = [...new Set(
-            allSubmissionsData
+            adminState.allSubmissions
                 .filter(s => s.pssStation === selectedPSS)
                 .map(s => s.staffName)
         )].filter(Boolean).sort();
@@ -3913,24 +4158,32 @@ function filterViewAllData() {
     const filterToDate = document.getElementById('viewFilterToDate')?.value || '';
     const filterStaff = document.getElementById('viewFilterStaff')?.value || '';
     
-    let filtered = allSubmissionsData;
+    console.log('📊 Filtering View All data:', { filterPSS, filterFromDate, filterToDate, filterStaff });
+    console.log(`📊 Source data count: ${adminState.allSubmissions.length}`);
+    
+    let filtered = adminState.allSubmissions;
     
     if (filterPSS) {
         filtered = filtered.filter(s => s.pssStation === filterPSS);
+        console.log(`  After PSS filter: ${filtered.length} records`);
     }
     
     if (filterFromDate) {
         filtered = filtered.filter(s => s.date >= filterFromDate);
+        console.log(`  After From Date filter: ${filtered.length} records`);
     }
     if (filterToDate) {
         filtered = filtered.filter(s => s.date <= filterToDate);
+        console.log(`  After To Date filter: ${filtered.length} records`);
     }
     
     if (filterStaff) {
         filtered = filtered.filter(s => s.staffName === filterStaff);
+        console.log(`  After Staff filter: ${filtered.length} records`);
     }
     
     viewAllFilteredData = filtered;
+    console.log(`✅ Final filtered count: ${viewAllFilteredData.length}`);
     renderExcelStyleTable(viewAllFilteredData);
 }
 
@@ -3944,6 +4197,58 @@ function clearViewFilters() {
     updateViewStaffFilterByPSS('');
 }
 
+// Helper function to extract equipment values from various data formats
+function extractEquipmentValue(equipmentData, field) {
+    if (!equipmentData) return '-';
+    
+    // Direct property access (new format)
+    if (equipmentData[field]) {
+        return equipmentData[field];
+    }
+    
+    // Old format with combined strings like "45 A @ 11:00" or "0 kV @ --:--"
+    if (field === 'maxVoltage' || field === 'minVoltage') {
+        // Extract voltage from string like "11.5 kV @ 10:30"
+        const voltageMatch = equipmentData.voltage || equipmentData.maxVoltage || equipmentData.minVoltage;
+        if (typeof voltageMatch === 'string') {
+            const match = voltageMatch.match(/(\d+\.?\d*)\s*kV/i);
+            return match ? match[1] + ' kV' : '-';
+        }
+    }
+    
+    if (field === 'maxVoltageTime' || field === 'minVoltageTime') {
+        // Extract time from voltage string
+        const voltageMatch = equipmentData.voltage || equipmentData.maxVoltage || equipmentData.minVoltage;
+        if (typeof voltageMatch === 'string') {
+            const match = voltageMatch.match(/@\s*(\d{1,2}:\d{2})/);
+            return match ? match[1] : '--:--';
+        }
+    }
+    
+    if (field === 'maxLoad' || field === 'minLoad') {
+        // Extract load from string like "45 A @ 11:00"
+        const loadMatch = equipmentData.load || equipmentData.maxLoad || equipmentData.minLoad;
+        if (typeof loadMatch === 'string') {
+            const match = loadMatch.match(/(\d+\.?\d*)\s*A/i);
+            return match ? match[1] : '-';
+        }
+        if (typeof loadMatch === 'number') {
+            return loadMatch;
+        }
+    }
+    
+    if (field === 'maxLoadTime' || field === 'minLoadTime') {
+        // Extract time from load string
+        const loadMatch = equipmentData.load || equipmentData.maxLoad || equipmentData.minLoad;
+        if (typeof loadMatch === 'string') {
+            const match = loadMatch.match(/@\s*(\d{1,2}:\d{2})/);
+            return match ? match[1] : '--:--';
+        }
+    }
+    
+    return '-';
+}
+
 function renderExcelStyleTable(data) {
     const tbody = document.getElementById('excelDataBody');
     
@@ -3954,8 +4259,25 @@ function renderExcelStyleTable(data) {
         return;
     }
     
+    console.log('🎨 Rendering Excel table with', data.length, 'entries');
+    if (data.length > 0) {
+        const sample = data[0];
+        console.log('📊 Sample entry keys:', Object.keys(sample));
+        console.log('📊 Sample IC1:', sample.ic1);
+        console.log('📊 Sample PTR1_33kv:', sample.ptr1_33kv);
+        if (sample.feeders) {
+            console.log('📊 Sample Feeders:', Object.keys(sample.feeders));
+            const firstFeeder = Object.values(sample.feeders)[0];
+            console.log('📊 First Feeder Data:', firstFeeder);
+        }
+    }
+    
     // Render data rows
-    tbody.innerHTML = data.map(entry => {
+    tbody.innerHTML = data.map((entry, index) => {
+        if (index === 0) {
+            console.log('🔍 Rendering first entry - Full data:', JSON.stringify(entry, null, 2).substring(0, 1000));
+        }
+        
         let totalMaxLoad = 0;
         let totalMinLoad = 0;
         
@@ -3975,14 +4297,14 @@ function renderExcelStyleTable(data) {
                 <td style="padding: 10px 8px; font-family: monospace; border: 1px solid rgba(255,255,255,0.08); position: sticky; left: 340px; background: rgba(30,41,59,0.95); z-index: 50;">${entry.phoneNumber || '-'}</td>
                 
                 <!-- I/C-1 Data -->
-                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: white;">${entry.ic1?.maxVoltage || '-'}</td>
-                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ic1?.maxVoltageTime || '-'}</td>
-                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: white;">${entry.ic1?.minVoltage || '-'}</td>
-                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ic1?.minVoltageTime || '-'}</td>
-                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: #fca5a5; font-weight: 600;">${entry.ic1?.maxLoad || '-'}</td>
-                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ic1?.maxLoadTime || '-'}</td>
-                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: #fca5a5; font-weight: 600;">${entry.ic1?.minLoad || '-'}</td>
-                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ic1?.minLoadTime || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: white;">${entry.ic1?.maxVoltage ? entry.ic1.maxVoltage + ' kV' : '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ic1?.maxVoltageTime || '--:--'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: white;">${entry.ic1?.minVoltage ? entry.ic1.minVoltage + ' kV' : '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ic1?.minVoltageTime || '--:--'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: #fca5a5; font-weight: 600;">${entry.ic1?.maxLoad ? entry.ic1.maxLoad + ' A' : '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ic1?.maxLoadTime || '--:--'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: #fca5a5; font-weight: 600;">${entry.ic1?.minLoad ? entry.ic1.minLoad + ' A' : '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ic1?.minLoadTime || '--:--'}</td>
                 
                 <!-- I/C-2 Data -->
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: white;">${entry.ic2?.maxVoltage || '-'}</td>
@@ -4014,6 +4336,26 @@ function renderExcelStyleTable(data) {
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: #86efac; font-weight: 600;">${entry.ptr2_33kv?.minLoad || '-'}</td>
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr2_33kv?.minLoadTime || '-'}</td>
                 
+                <!-- PTR-3 33kv Data -->
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: white;">${entry.ptr3_33kv?.maxVoltage || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr3_33kv?.maxVoltageTime || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: white;">${entry.ptr3_33kv?.minVoltage || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr3_33kv?.minVoltageTime || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: #86efac; font-weight: 600;">${entry.ptr3_33kv?.maxLoad || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr3_33kv?.maxLoadTime || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: #86efac; font-weight: 600;">${entry.ptr3_33kv?.minLoad || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr3_33kv?.minLoadTime || '-'}</td>
+                
+                <!-- PTR-4 33kv Data -->
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: white;">${entry.ptr4_33kv?.maxVoltage || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr4_33kv?.maxVoltageTime || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: white;">${entry.ptr4_33kv?.minVoltage || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr4_33kv?.minVoltageTime || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: #86efac; font-weight: 600;">${entry.ptr4_33kv?.maxLoad || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr4_33kv?.maxLoadTime || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: #86efac; font-weight: 600;">${entry.ptr4_33kv?.minLoad || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr4_33kv?.minLoadTime || '-'}</td>
+                
                 <!-- PTR-1 11kv Data -->
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: white;">${entry.ptr1_11kv?.maxVoltage || '-'}</td>
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr1_11kv?.maxVoltageTime || '-'}</td>
@@ -4033,28 +4375,93 @@ function renderExcelStyleTable(data) {
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr2_11kv?.maxLoadTime || '-'}</td>
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: #86efac; font-weight: 600;">${entry.ptr2_11kv?.minLoad || '-'}</td>
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr2_11kv?.minLoadTime || '-'}</td>
+                
+                <!-- PTR-3 11kv Data -->
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: white;">${entry.ptr3_11kv?.maxVoltage || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr3_11kv?.maxVoltageTime || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: white;">${entry.ptr3_11kv?.minVoltage || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr3_11kv?.minVoltageTime || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: #86efac; font-weight: 600;">${entry.ptr3_11kv?.maxLoad || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr3_11kv?.maxLoadTime || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: #86efac; font-weight: 600;">${entry.ptr3_11kv?.minLoad || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr3_11kv?.minLoadTime || '-'}</td>
+                
+                <!-- PTR-4 11kv Data -->
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: white;">${entry.ptr4_11kv?.maxVoltage || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr4_11kv?.maxVoltageTime || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: white;">${entry.ptr4_11kv?.minVoltage || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr4_11kv?.minVoltageTime || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: #86efac; font-weight: 600;">${entry.ptr4_11kv?.maxLoad || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr4_11kv?.maxLoadTime || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: #86efac; font-weight: 600;">${entry.ptr4_11kv?.minLoad || '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr4_11kv?.minLoadTime || '-'}</td>
             `;
             
             // Render Feeders (6 feeders, 10 columns each)
+            if (index === 0 && entry.feeders) {
+                console.log('🔍 Feeder keys in first entry:', Object.keys(entry.feeders));
+                console.log('🔍 First feeder data:', Object.values(entry.feeders)[0]);
+            }
+            
             for (let i = 1; i <= 6; i++) {
-                const feederKey = `Feeder-${i}`;  // FIXED: Use hyphen, not space
-                const feeder = entry.feeders?.[feederKey];
+                const feederKey = `Feeder-${i}`;  // Try "Feeder-1" format
+                let feeder = entry.feeders?.[feederKey];
+                
+                // If not found, try alternative formats
+                if (!feeder && entry.feeders) {
+                    const altKeys = [
+                        `Feeder ${i}`,  // "Feeder 1"
+                        `feeder-${i}`,  // "feeder-1"
+                        `feeder_${i}`,  // "feeder_1"
+                        Object.keys(entry.feeders)[i-1]  // Use array index
+                    ];
+                    
+                    for (const key of altKeys) {
+                        if (entry.feeders[key]) {
+                            feeder = entry.feeders[key];
+                            if (index === 0) console.log(`✅ Found feeder ${i} using key: "${key}"`);
+                            break;
+                        }
+                    }
+                }
                 
                 if (feeder) {
+                    // Fix: Handle nested name object properly
+                    let feederName = `Feeder-${i}`;
+                    if (feeder.name) {
+                        if (typeof feeder.name === 'object' && feeder.name.name) {
+                            feederName = feeder.name.name;
+                        } else if (typeof feeder.name === 'string') {
+                            feederName = feeder.name;
+                        }
+                    } else if (feeder.feederName) {
+                        if (typeof feeder.feederName === 'object' && feeder.feederName.name) {
+                            feederName = feeder.feederName.name;
+                        } else if (typeof feeder.feederName === 'string') {
+                            feederName = feeder.feederName;
+                        }
+                    }
+                    const maxVoltage = feeder.maxVoltage || feeder.maxVoltage || '0';
+                    const minVoltage = feeder.minVoltage || '0';
+                    const maxLoad = feeder.maxLoad || '0';
+                    const minLoad = feeder.minLoad || '0';
+                    
                     row += `
+                        <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); color: #60a5fa; font-weight: 600; font-size: 11px;">${feederName}</td>
                         <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); color: #93c5fd; font-weight: 600;">${feeder.ptrNo || '-'}</td>
-                        <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); color: white;">${feeder.maxVoltage || '-'}</td>
-                        <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${feeder.maxVoltageTime || '-'}</td>
-                        <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); color: white;">${feeder.minVoltage || '-'}</td>
-                        <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${feeder.minVoltageTime || '-'}</td>
-                        <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); color: #93c5fd; font-weight: 600;">${feeder.maxLoad || '-'}</td>
-                        <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${feeder.maxLoadTime || '-'}</td>
-                        <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); color: #93c5fd; font-weight: 600;">${feeder.minLoad || '-'}</td>
-                        <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${feeder.minLoadTime || '-'}</td>
+                        <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); color: white;">${maxVoltage} kV</td>
+                        <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${feeder.maxVoltageTime || '--:--'}</td>
+                        <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); color: white;">${minVoltage} kV</td>
+                        <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${feeder.minVoltageTime || '--:--'}</td>
+                        <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); color: #93c5fd; font-weight: 600;">${maxLoad} A</td>
+                        <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${feeder.maxLoadTime || '--:--'}</td>
+                        <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); color: #93c5fd; font-weight: 600;">${minLoad} A</td>
+                        <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${feeder.minLoadTime || '--:--'}</td>
                     `;
                 } else {
                     // Empty cells for missing feeders
                     row += `
+                        <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); color: rgba(255,255,255,0.5);">-</td>
                         <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); color: rgba(255,255,255,0.5);">-</td>
                         <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); color: rgba(255,255,255,0.5);">-</td>
                         <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(59,130,246,0.2); background: rgba(59,130,246,0.05); color: rgba(255,255,255,0.5);">-</td>
@@ -4100,13 +4507,13 @@ function renderExcelStyleTable(data) {
         return row;
     }).join('');
     
-    console.log(`✅ Rendered ${data.length} entries in Excel format (Master View)`);
+    console.log(`? Rendered ${data.length} entries in Excel format (Master View)`);
 }
 
 // Export View All to comprehensive Excel
 async function exportViewAllToExcel() {
     try {
-        const dataToExport = viewAllFilteredData.length > 0 ? viewAllFilteredData : allSubmissionsData;
+        const dataToExport = viewAllFilteredData.length > 0 ? viewAllFilteredData : adminState.allSubmissions;
         
         if (dataToExport.length === 0) {
             alert('No data to export');
@@ -4128,19 +4535,31 @@ async function exportViewAllToExcel() {
             // PTR-2 33kv (8 columns)
             'PTR-2 33kv  MAX VOLTAGE (KV)', 'PTR-2 33kv  MAX VOLTAGE (KV) TIME', 'PTR-2 33kv  MIN VOLTAGE (KV)', 'PTR-2 33kv  MIN VOLTAGE (KV)  TIME',
             'PTR-2 33kv  MAX LOAD (AMP)', 'PTR-2 33kv  MAX LOAD (AMP)  TIME', 'PTR-2 33kv  MIN LOAD (AMP)', 'PTR-2 33kv  MIN LOAD (AMP)  TIME',
+            // PTR-3 33kv (8 columns)
+            'PTR-3 33kv  MAX VOLTAGE (KV)', 'PTR-3 33kv  MAX VOLTAGE (KV) TIME', 'PTR-3 33kv  MIN VOLTAGE (KV)', 'PTR-3 33kv  MIN VOLTAGE (KV)  TIME',
+            'PTR-3 33kv  MAX LOAD (AMP)', 'PTR-3 33kv  MAX LOAD (AMP)  TIME', 'PTR-3 33kv  MIN LOAD (AMP)', 'PTR-3 33kv  MIN LOAD (AMP)  TIME',
+            // PTR-4 33kv (8 columns)
+            'PTR-4 33kv  MAX VOLTAGE (KV)', 'PTR-4 33kv  MAX VOLTAGE (KV) TIME', 'PTR-4 33kv  MIN VOLTAGE (KV)', 'PTR-4 33kv  MIN VOLTAGE (KV)  TIME',
+            'PTR-4 33kv  MAX LOAD (AMP)', 'PTR-4 33kv  MAX LOAD (AMP)  TIME', 'PTR-4 33kv  MIN LOAD (AMP)', 'PTR-4 33kv  MIN LOAD (AMP)  TIME',
             // PTR-1 11kv (8 columns)
             'PTR-1 11kv  MAX VOLTAGE (KV)', 'PTR-1 11kv   MAX VOLTAGE (KV) TIME', 'PTR-1 11kv   MIN VOLTAGE (KV)', 'PTR-1 11kv   MIN VOLTAGE (KV)  TIME',
             'PTR-1 11kv   MAX LOAD (AMP)', 'PTR-1 11kv   MAX LOAD (AMP)  TIME', 'PTR-1 11kv   MIN LOAD (AMP)', 'PTR-1 11kv   MIN LOAD (AMP)  TIME',
             // PTR-2 11kv (8 columns)
             'PTR-2 11kv  MAX VOLTAGE (KV)', 'PTR-2 11kv  MAX VOLTAGE (KV) TIME', 'PTR-2 11kv  MIN VOLTAGE (KV)', 'PTR-2 11kv  MIN VOLTAGE (KV)  TIME',
             'PTR-2 11kv  MAX LOAD (AMP)', 'PTR-2 11kv  MAX LOAD (AMP)  TIME', 'PTR-2 11kv  MIN LOAD (AMP)', 'MIN LOAD (AMP)  TIME',
-            // Feeders (6 feeders × 9 columns = 54 columns)
-            'PTR no (F1)', 'Feeder-1  MAX VOLTAGE (KV)', 'Feeder-1  MAX VOLTAGE (KV) TIME', 'Feeder-1  MIN VOLTAGE (KV)', 'Feeder-1  MIN VOLTAGE (KV)  TIME', 'Feeder-1  MAX LOAD (AMP)', 'Feeder-1  MAX LOAD (AMP)  TIME', 'Feeder-1  MIN LOAD (AMP)', 'Feeder-1  MIN LOAD (AMP)  TIME',
-            'PTR no (F2)', 'Feeder-2  MAX VOLTAGE (KV)', 'Feeder-2  MAX VOLTAGE (KV) TIME', 'Feeder-2  MIN VOLTAGE (KV)', 'Feeder-2  MIN VOLTAGE (KV)  TIME', 'Feeder-2  MAX LOAD (AMP)', 'Feeder-2  MAX LOAD (AMP)  TIME', 'Feeder-2  MIN LOAD (AMP)', 'Feeder-2  MIN LOAD (AMP)  TIME',
-            'PTR no (F3)', 'Feeder-3  MAX VOLTAGE (KV)', 'Feeder-3  MAX VOLTAGE (KV) TIME', 'Feeder-3  MIN VOLTAGE (KV)', 'Feeder-3  MIN VOLTAGE (KV)  TIME', 'Feeder-3  MAX LOAD (AMP)', 'Feeder-3  MAX LOAD (AMP)  TIME', 'Feeder-3  MIN LOAD (AMP)', 'Feeder-3  MIN LOAD (AMP)  TIME',
-            'PTR no (F4)', 'Feeder-4  MAX VOLTAGE (KV)', 'Feeder-4  MAX VOLTAGE (KV) TIME', 'Feeder-4  MIN VOLTAGE (KV)', 'Feeder-4  MIN VOLTAGE (KV)  TIME', 'Feeder-4  MAX LOAD (AMP)', 'Feeder-4  MAX LOAD (AMP)  TIME', 'Feeder-4  MIN LOAD (AMP)', 'Feeder-4  MIN LOAD (AMP)  TIME',
-            'PTR no (F5)', 'Feeder-5  MAX VOLTAGE (KV)', 'Feeder-5  MAX VOLTAGE (KV) TIME', 'Feeder-5  MIN VOLTAGE (KV)', 'Feeder-5  MIN VOLTAGE (KV)  TIME', 'Feeder-5  MAX LOAD (AMP)', 'Feeder-5  MAX LOAD (AMP)  TIME', 'Feeder-5  MIN LOAD (AMP)', 'Feeder-5  MIN LOAD (AMP)  TIME',
-            'PTR no (F6)', 'Feeder-6  MAX VOLTAGE (KV)', 'Feeder-6  MAX VOLTAGE (KV) TIME', 'Feeder-6  MIN VOLTAGE (KV)', 'Feeder-6  MIN VOLTAGE (KV)  TIME', 'Feeder-6  MAX LOAD (AMP)', 'Feeder-6  MAX LOAD (AMP)  TIME', 'Feeder-6  MIN LOAD (AMP)', 'Feeder-6  MIN LOAD (AMP)  TIME',
+            // PTR-3 11kv (8 columns)
+            'PTR-3 11kv  MAX VOLTAGE (KV)', 'PTR-3 11kv  MAX VOLTAGE (KV) TIME', 'PTR-3 11kv  MIN VOLTAGE (KV)', 'PTR-3 11kv  MIN VOLTAGE (KV)  TIME',
+            'PTR-3 11kv  MAX LOAD (AMP)', 'PTR-3 11kv  MAX LOAD (AMP)  TIME', 'PTR-3 11kv  MIN LOAD (AMP)', 'PTR-3 11kv  MIN LOAD (AMP)  TIME',
+            // PTR-4 11kv (8 columns)
+            'PTR-4 11kv  MAX VOLTAGE (KV)', 'PTR-4 11kv  MAX VOLTAGE (KV) TIME', 'PTR-4 11kv  MIN VOLTAGE (KV)', 'PTR-4 11kv  MIN VOLTAGE (KV)  TIME',
+            'PTR-4 11kv  MAX LOAD (AMP)', 'PTR-4 11kv  MAX LOAD (AMP)  TIME', 'PTR-4 11kv  MIN LOAD (AMP)', 'PTR-4 11kv  MIN LOAD (AMP)  TIME',
+            // Feeders (6 feeders � 10 columns = 60 columns) - NOW WITH FEEDER NAME
+            'Feeder Name (F1)', 'PTR no (F1)', 'Feeder-1  MAX VOLTAGE (KV)', 'Feeder-1  MAX VOLTAGE (KV) TIME', 'Feeder-1  MIN VOLTAGE (KV)', 'Feeder-1  MIN VOLTAGE (KV)  TIME', 'Feeder-1  MAX LOAD (AMP)', 'Feeder-1  MAX LOAD (AMP)  TIME', 'Feeder-1  MIN LOAD (AMP)', 'Feeder-1  MIN LOAD (AMP)  TIME',
+            'Feeder Name (F2)', 'PTR no (F2)', 'Feeder-2  MAX VOLTAGE (KV)', 'Feeder-2  MAX VOLTAGE (KV) TIME', 'Feeder-2  MIN VOLTAGE (KV)', 'Feeder-2  MIN VOLTAGE (KV)  TIME', 'Feeder-2  MAX LOAD (AMP)', 'Feeder-2  MAX LOAD (AMP)  TIME', 'Feeder-2  MIN LOAD (AMP)', 'Feeder-2  MIN LOAD (AMP)  TIME',
+            'Feeder Name (F3)', 'PTR no (F3)', 'Feeder-3  MAX VOLTAGE (KV)', 'Feeder-3  MAX VOLTAGE (KV) TIME', 'Feeder-3  MIN VOLTAGE (KV)', 'Feeder-3  MIN VOLTAGE (KV)  TIME', 'Feeder-3  MAX LOAD (AMP)', 'Feeder-3  MAX LOAD (AMP)  TIME', 'Feeder-3  MIN LOAD (AMP)', 'Feeder-3  MIN LOAD (AMP)  TIME',
+            'Feeder Name (F4)', 'PTR no (F4)', 'Feeder-4  MAX VOLTAGE (KV)', 'Feeder-4  MAX VOLTAGE (KV) TIME', 'Feeder-4  MIN VOLTAGE (KV)', 'Feeder-4  MIN VOLTAGE (KV)  TIME', 'Feeder-4  MAX LOAD (AMP)', 'Feeder-4  MAX LOAD (AMP)  TIME', 'Feeder-4  MIN LOAD (AMP)', 'Feeder-4  MIN LOAD (AMP)  TIME',
+            'Feeder Name (F5)', 'PTR no (F5)', 'Feeder-5  MAX VOLTAGE (KV)', 'Feeder-5  MAX VOLTAGE (KV) TIME', 'Feeder-5  MIN VOLTAGE (KV)', 'Feeder-5  MIN VOLTAGE (KV)  TIME', 'Feeder-5  MAX LOAD (AMP)', 'Feeder-5  MAX LOAD (AMP)  TIME', 'Feeder-5  MIN LOAD (AMP)', 'Feeder-5  MIN LOAD (AMP)  TIME',
+            'Feeder Name (F6)', 'PTR no (F6)', 'Feeder-6  MAX VOLTAGE (KV)', 'Feeder-6  MAX VOLTAGE (KV) TIME', 'Feeder-6  MIN VOLTAGE (KV)', 'Feeder-6  MIN VOLTAGE (KV)  TIME', 'Feeder-6  MAX LOAD (AMP)', 'Feeder-6  MAX LOAD (AMP)  TIME', 'Feeder-6  MIN LOAD (AMP)', 'Feeder-6  MIN LOAD (AMP)  TIME',
             // Station Transformer (8 columns)
             'Station Transformer   MAX VOLTAGE (KV)', 'Station Transformer   MAX VOLTAGE (KV) TIME',
             'Station Transformer   MIN VOLTAGE (KV)', 'Station Transformer   MIN VOLTAGE (KV)  TIME',
@@ -4195,6 +4614,16 @@ async function exportViewAllToExcel() {
                 entry.ptr2_33kv?.minVoltage || '', entry.ptr2_33kv?.minVoltageTime || '',
                 entry.ptr2_33kv?.maxLoad || '', entry.ptr2_33kv?.maxLoadTime || '',
                 entry.ptr2_33kv?.minLoad || '', entry.ptr2_33kv?.minLoadTime || '',
+                // PTR-3 33kv
+                entry.ptr3_33kv?.maxVoltage || '', entry.ptr3_33kv?.maxVoltageTime || '',
+                entry.ptr3_33kv?.minVoltage || '', entry.ptr3_33kv?.minVoltageTime || '',
+                entry.ptr3_33kv?.maxLoad || '', entry.ptr3_33kv?.maxLoadTime || '',
+                entry.ptr3_33kv?.minLoad || '', entry.ptr3_33kv?.minLoadTime || '',
+                // PTR-4 33kv
+                entry.ptr4_33kv?.maxVoltage || '', entry.ptr4_33kv?.maxVoltageTime || '',
+                entry.ptr4_33kv?.minVoltage || '', entry.ptr4_33kv?.minVoltageTime || '',
+                entry.ptr4_33kv?.maxLoad || '', entry.ptr4_33kv?.maxLoadTime || '',
+                entry.ptr4_33kv?.minLoad || '', entry.ptr4_33kv?.minLoadTime || '',
                 // PTR-1 11kv
                 entry.ptr1_11kv?.maxVoltage || '', entry.ptr1_11kv?.maxVoltageTime || '',
                 entry.ptr1_11kv?.minVoltage || '', entry.ptr1_11kv?.minVoltageTime || '',
@@ -4204,17 +4633,28 @@ async function exportViewAllToExcel() {
                 entry.ptr2_11kv?.maxVoltage || '', entry.ptr2_11kv?.maxVoltageTime || '',
                 entry.ptr2_11kv?.minVoltage || '', entry.ptr2_11kv?.minVoltageTime || '',
                 entry.ptr2_11kv?.maxLoad || '', entry.ptr2_11kv?.maxLoadTime || '',
-                entry.ptr2_11kv?.minLoad || '', entry.ptr2_11kv?.minLoadTime || ''
+                entry.ptr2_11kv?.minLoad || '', entry.ptr2_11kv?.minLoadTime || '',
+                // PTR-3 11kv
+                entry.ptr3_11kv?.maxVoltage || '', entry.ptr3_11kv?.maxVoltageTime || '',
+                entry.ptr3_11kv?.minVoltage || '', entry.ptr3_11kv?.minVoltageTime || '',
+                entry.ptr3_11kv?.maxLoad || '', entry.ptr3_11kv?.maxLoadTime || '',
+                entry.ptr3_11kv?.minLoad || '', entry.ptr3_11kv?.minLoadTime || '',
+                // PTR-4 11kv
+                entry.ptr4_11kv?.maxVoltage || '', entry.ptr4_11kv?.maxVoltageTime || '',
+                entry.ptr4_11kv?.minVoltage || '', entry.ptr4_11kv?.minVoltageTime || '',
+                entry.ptr4_11kv?.maxLoad || '', entry.ptr4_11kv?.maxLoadTime || '',
+                entry.ptr4_11kv?.minLoad || '', entry.ptr4_11kv?.minLoadTime || ''
             ];
             
-            // Add feeder data (6 feeders × 10 columns = 60 columns)
+            // Add feeder data (6 feeders � 10 columns = 60 columns)
             for (let i = 1; i <= 6; i++) {
                 const feederKey = `Feeder-${i}`;
                 const feeder = entry.feeders?.[feederKey];
                 
                 if (feeder) {
                     row.push(
-                        feeder.ptrNo || '',
+                        feeder.name || `Feeder-${i}`,  // Feeder Name
+                        feeder.ptrNo || '',            // PTR no
                         feeder.maxVoltage || '',
                         feeder.maxVoltageTime || '',
                         feeder.minVoltage || '',
@@ -4275,11 +4715,11 @@ async function exportViewAllToExcel() {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
         
-        alert('✅ Master Excel data exported successfully!');
+        alert('? Master Excel data exported successfully!');
         
     } catch (error) {
         console.error('Export error:', error);
-        alert('❌ Error exporting data: ' + error.message);
+        alert('? Error exporting data: ' + error.message);
     }
 }
 
@@ -4305,7 +4745,7 @@ async function downloadLatestTemplate() {
         const currentUserPhone = appState.currentUser?.phoneNumber || firebase.auth().currentUser?.phoneNumber;
         
         if (!currentUserPhone) {
-            alert('❌ Please login first to download your data.');
+            alert('? Please login first to download your data.');
             return;
         }
         
@@ -4319,7 +4759,7 @@ async function downloadLatestTemplate() {
             .get();
         
         if (snapshot.empty) {
-            alert('❌ No data found for your account. Please submit data first.');
+            alert('? No data found for your account. Please submit data first.');
             return;
         }
         
@@ -4357,7 +4797,7 @@ async function downloadLatestTemplate() {
             'PTR2_11_PTR', 'PTR2_11_Max_V', 'PTR2_11_Max_V_Time', 'PTR2_11_Min_V', 'PTR2_11_Min_V_Time', 'PTR2_11_Max_I', 'PTR2_11_Max_I_Time', 'PTR2_11_Min_I', 'PTR2_11_Min_I_Time'
         ];
         
-        // Add Feeder headers (6 feeders × 10 columns each = 60 columns)
+        // Add Feeder headers (6 feeders � 10 columns each = 60 columns)
         for (let i = 1; i <= 6; i++) {
             headers.push(
                 `F${i}_Name`, `F${i}_PTR`, `F${i}_Max_V`, `F${i}_Max_V_Time`, `F${i}_Min_V`, `F${i}_Min_V_Time`,
@@ -4365,7 +4805,7 @@ async function downloadLatestTemplate() {
             );
         }
         
-        // Add remaining equipment headers (3 × 8 columns = 24 columns)
+        // Add remaining equipment headers (3 � 8 columns = 24 columns)
         headers.push(
             // Station Transformer
             'ST_PTR', 'ST_Max_V', 'ST_Max_V_Time', 'ST_Min_V', 'ST_Min_V_Time', 'ST_Max_I', 'ST_Max_I_Time', 'ST_Min_I', 'ST_Min_I_Time',
@@ -4464,17 +4904,17 @@ async function downloadLatestTemplate() {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
         
-        alert(`✅ Template downloaded successfully!\n\n📋 File: ${filename}\n📊 Contains: ${headers.length} columns\n📅 Date: ${dateStr}\n🏢 PSS: ${pssName}\n👤 Your Name: ${row[2]}\n📞 Your Phone: ${currentUserPhone}\n\n💡 Instructions:\n1. Open the file in Excel\n2. Edit ONLY the values you want to change\n3. Keep date format: dd-mm-yyyy\n4. Save and re-upload\n5. System will update only changed values!`);
+        alert(`? Template downloaded successfully!\n\n📊 File: ${filename}\n📊 Contains: ${headers.length} columns\n📊 Date: ${dateStr}\n📊 PSS: ${pssName}\n📊 Your Name: ${row[2]}\n📊 Your Phone: ${currentUserPhone}\n\n📊 Instructions:\n1. Open the file in Excel\n2. Edit ONLY the values you want to change\n3. Keep date format: dd-mm-yyyy\n4. Save and re-upload\n5. System will update only changed values!`);
         
     } catch (error) {
         console.error('Download error:', error);
         
         if (error.code === 'permission-denied') {
-            alert('❌ Permission denied. Please check:\n1. You are logged in\n2. Firestore rules allow reading your data\n3. You have submitted data before');
+            alert('? Permission denied. Please check:\n1. You are logged in\n2. Firestore rules allow reading your data\n3. You have submitted data before');
         } else if (error.code === 'failed-precondition') {
-            alert('❌ Database index required. Please create index for:\nCollection: daily_entries\nFields: phoneNumber (asc), timestamp (desc)');
+            alert('? Database index required. Please create index for:\nCollection: daily_entries\nFields: phoneNumber (asc), timestamp (desc)');
         } else {
-            alert('❌ Error downloading template: ' + error.message);
+            alert('? Error downloading template: ' + error.message);
         }
     }
 }
@@ -4491,7 +4931,7 @@ async function downloadPSSStationsTemplate() {
         const pssSnapshot = await db.collection('pss_stations').get();
         
         if (pssSnapshot.empty) {
-            alert('❌ No PSS stations found in database.');
+            alert('? No PSS stations found in database.');
             return;
         }
         
@@ -4546,11 +4986,11 @@ async function downloadPSSStationsTemplate() {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
         
-        alert(`✅ PSS Stations template downloaded!\n\n📊 Total: ${pssSnapshot.docs.length} PSS stations\n\nYou can now:\n1. Edit PSS names, phone numbers, staff names\n2. Update addresses or divisions\n3. Save and re-upload\n4. System will update only changed fields!`);
+        alert(`? PSS Stations template downloaded!\n\n📊 Total: ${pssSnapshot.docs.length} PSS stations\n\nYou can now:\n1. Edit PSS names, phone numbers, staff names\n2. Update addresses or divisions\n3. Save and re-upload\n4. System will update only changed fields!`);
         
     } catch (error) {
         console.error('Download error:', error);
-        alert('❌ Error downloading PSS stations: ' + error.message);
+        alert('? Error downloading PSS stations: ' + error.message);
     }
 }
 
@@ -4564,7 +5004,7 @@ async function downloadUsersTemplate() {
         const usersSnapshot = await db.collection('users').get();
         
         if (usersSnapshot.empty) {
-            alert('❌ No users found in database.');
+            alert('? No users found in database.');
             return;
         }
         
@@ -4629,11 +5069,11 @@ async function downloadUsersTemplate() {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
         
-        alert(`✅ Users template downloaded!\n\n👥 Total: ${usersSnapshot.docs.length} users\n\nYou can now:\n1. Edit staff names\n2. Update phone numbers (carefully!)\n3. Change roles or PSS assignments\n4. Save and re-upload\n5. System will update only changed fields!`);
+        alert(`? Users template downloaded!\n\n📊 Total: ${usersSnapshot.docs.length} users\n\nYou can now:\n1. Edit staff names\n2. Update phone numbers (carefully!)\n3. Change roles or PSS assignments\n4. Save and re-upload\n5. System will update only changed fields!`);
         
     } catch (error) {
         console.error('Download error:', error);
-        alert('❌ Error downloading users: ' + error.message);
+        alert('? Error downloading users: ' + error.message);
     }
 }
 
@@ -4643,13 +5083,13 @@ async function downloadUsersTemplate() {
 
 async function downloadLatestSubmissionTemplate() {
     try {
-        if (!allSubmissionsData || allSubmissionsData.length === 0) {
-            alert('❌ No submissions found. Please wait for data to load.');
+        if (!adminState.allSubmissions || adminState.allSubmissions.length === 0) {
+            alert('? No submissions found. Please wait for data to load.');
             return;
         }
         
         // Get the latest submission (already sorted by timestamp desc)
-        const latestSubmission = allSubmissionsData[0];
+        const latestSubmission = adminState.allSubmissions[0];
         
         // Format date as dd-mm-yyyy
         const formatDateForExcel = (dateStr) => {
@@ -4682,7 +5122,7 @@ async function downloadLatestSubmissionTemplate() {
             'PTR2_11_PTR', 'PTR2_11_Max_V', 'PTR2_11_Max_V_Time', 'PTR2_11_Min_V', 'PTR2_11_Min_V_Time', 'PTR2_11_Max_I', 'PTR2_11_Max_I_Time', 'PTR2_11_Min_I', 'PTR2_11_Min_I_Time'
         ];
         
-        // Add Feeder headers (6 feeders × 10 columns each = 60 columns)
+        // Add Feeder headers (6 feeders � 10 columns each = 60 columns)
         for (let i = 1; i <= 6; i++) {
             headers.push(
                 `F${i}_Name`, `F${i}_PTR`, `F${i}_Max_V`, `F${i}_Max_V_Time`, `F${i}_Min_V`, `F${i}_Min_V_Time`,
@@ -4690,7 +5130,7 @@ async function downloadLatestSubmissionTemplate() {
             );
         }
         
-        // Add remaining equipment headers (3 × 9 columns = 27 columns)
+        // Add remaining equipment headers (3 � 9 columns = 27 columns)
         headers.push(
             // Station Transformer
             'ST_PTR', 'ST_Max_V', 'ST_Max_V_Time', 'ST_Min_V', 'ST_Min_V_Time', 'ST_Max_I', 'ST_Max_I_Time', 'ST_Min_I', 'ST_Min_I_Time',
@@ -4787,11 +5227,11 @@ async function downloadLatestSubmissionTemplate() {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
         
-        alert(`✅ Latest submission downloaded!\n\n📋 File: ${filename}\n📊 Columns: ${headers.length}\n📅 Date: ${formatDateForExcel(latestSubmission.date)}\n🏢 PSS: ${latestSubmission.pssName}\n👤 Staff: ${latestSubmission.staffName}\n\nYou can now:\n1. Edit equipment values\n2. Update readings\n3. Save and re-upload\n4. System will update only changed fields!`);
+        alert(`? Latest submission downloaded!\n\n📊 File: ${filename}\n📊 Columns: ${headers.length}\n📊 Date: ${formatDateForExcel(latestSubmission.date)}\n📊 PSS: ${latestSubmission.pssName}\n📊 Staff: ${latestSubmission.staffName}\n\nYou can now:\n1. Edit equipment values\n2. Update readings\n3. Save and re-upload\n4. System will update only changed fields!`);
         
     } catch (error) {
         console.error('Download error:', error);
-        alert('❌ Error downloading submission: ' + error.message);
+        alert('? Error downloading submission: ' + error.message);
     }
 }
 
@@ -4861,7 +5301,7 @@ async function loadPSSAdminData() {
                     <input type="text" class="editable-cell" value="${data.phoneNumber || ''}" data-field="phoneNumber" data-original="${data.phoneNumber || ''}">
                 </td>
                 <td class="modified-marker" style="padding: 8px; border: 1px solid rgba(168,85,247,0.2);">
-                    <span style="opacity: 0;">●</span>
+                    <span style="opacity: 0;">?</span>
                 </td>
             `;
             tbody.appendChild(row);
@@ -4881,7 +5321,7 @@ async function loadPSSAdminData() {
                 if (current !== original) {
                     this.classList.add('modified');
                     row.classList.add('row-modified');
-                    marker.textContent = '🟡';
+                    marker.textContent = '📊';
                     marker.style.opacity = '1';
                 } else {
                     this.classList.remove('modified');
@@ -4889,18 +5329,18 @@ async function loadPSSAdminData() {
                     const anyModified = row.querySelectorAll('.modified').length > 0;
                     if (!anyModified) {
                         row.classList.remove('row-modified');
-                        marker.textContent = '●';
+                        marker.textContent = '?';
                         marker.style.opacity = '0';
                     }
                 }
             });
         });
         
-        console.log(`✅ Loaded ${snapshot.size} PSS admin records`);
+        console.log(`? Loaded ${snapshot.size} PSS admin records`);
         
     } catch (error) {
         console.error('Error loading PSS Admin data:', error);
-        alert('❌ Error loading PSS Admin data: ' + error.message);
+        alert('? Error loading PSS Admin data: ' + error.message);
     }
 }
 
@@ -4910,7 +5350,7 @@ async function savePSSAdminChanges() {
         const modifiedRows = document.querySelectorAll('#pss-admin-tbody .row-modified');
         
         if (modifiedRows.length === 0) {
-            alert('ℹ️ No changes detected. Edit cells to make changes.');
+            alert('📊 No changes detected. Edit cells to make changes.');
             return;
         }
         
@@ -4945,9 +5385,9 @@ async function savePSSAdminChanges() {
         }
         
         if (errors.length > 0) {
-            alert(`⚠️ Updated ${updateCount} records\n\nErrors (${errors.length}):\n${errors.join('\n')}`);
+            alert(`📊 Updated ${updateCount} records\n\nErrors (${errors.length}):\n${errors.join('\n')}`);
         } else {
-            alert(`✅ Successfully updated ${updateCount} PSS admin records!`);
+            alert(`? Successfully updated ${updateCount} PSS admin records!`);
         }
         
         // Reload table
@@ -4955,7 +5395,7 @@ async function savePSSAdminChanges() {
         
     } catch (error) {
         console.error('Error saving changes:', error);
-        alert('❌ Error saving changes: ' + error.message);
+        alert('? Error saving changes: ' + error.message);
     }
 }
 
@@ -4975,7 +5415,7 @@ function downloadPSSAdminCSV() {
         });
         
         if (rows.length === 1) {
-            alert('ℹ️ No data to download. Load PSS Admin data first.');
+            alert('📊 No data to download. Load PSS Admin data first.');
             return;
         }
         
@@ -4999,11 +5439,11 @@ function downloadPSSAdminCSV() {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
         
-        console.log(`✅ Downloaded ${rows.length - 1} PSS admin records`);
+        console.log(`? Downloaded ${rows.length - 1} PSS admin records`);
         
     } catch (error) {
         console.error('Download error:', error);
-        alert('❌ Error downloading CSV: ' + error.message);
+        alert('? Error downloading CSV: ' + error.message);
     }
 }
 
@@ -5045,7 +5485,7 @@ async function loadPSSDetailsData() {
                     <textarea class="editable-cell" data-field="helper" data-original="${helper}" style="font-size: 11px; min-height: 60px; resize: vertical;">${helper}</textarea>
                 </td>
                 <td class="modified-marker" style="padding: 8px; border: 1px solid rgba(168,85,247,0.2);">
-                    <span style="opacity: 0;">●</span>
+                    <span style="opacity: 0;">?</span>
                 </td>
             `;
             tbody.appendChild(row);
@@ -5065,25 +5505,25 @@ async function loadPSSDetailsData() {
                 if (current !== original) {
                     this.classList.add('modified');
                     row.classList.add('row-modified');
-                    marker.textContent = '🟡';
+                    marker.textContent = '📊';
                     marker.style.opacity = '1';
                 } else {
                     this.classList.remove('modified');
                     const anyModified = row.querySelectorAll('.modified').length > 0;
                     if (!anyModified) {
                         row.classList.remove('row-modified');
-                        marker.textContent = '●';
+                        marker.textContent = '?';
                         marker.style.opacity = '0';
                     }
                 }
             });
         });
         
-        console.log(`✅ Loaded ${snapshot.size} PSS detail records`);
+        console.log(`? Loaded ${snapshot.size} PSS detail records`);
         
     } catch (error) {
         console.error('Error loading PSS Details:', error);
-        alert('❌ Error loading PSS Details: ' + error.message);
+        alert('? Error loading PSS Details: ' + error.message);
     }
 }
 
@@ -5093,7 +5533,7 @@ async function savePSSDetailsChanges() {
         const modifiedRows = document.querySelectorAll('#pss-details-tbody .row-modified');
         
         if (modifiedRows.length === 0) {
-            alert('ℹ️ No changes detected. Edit cells to make changes.');
+            alert('📊 No changes detected. Edit cells to make changes.');
             return;
         }
         
@@ -5136,9 +5576,9 @@ async function savePSSDetailsChanges() {
         }
         
         if (errors.length > 0) {
-            alert(`⚠️ Updated ${updateCount} records\n\nErrors (${errors.length}):\n${errors.join('\n')}`);
+            alert(`📊 Updated ${updateCount} records\n\nErrors (${errors.length}):\n${errors.join('\n')}`);
         } else {
-            alert(`✅ Successfully updated ${updateCount} PSS detail records!`);
+            alert(`? Successfully updated ${updateCount} PSS detail records!`);
         }
         
         // Reload table
@@ -5146,7 +5586,7 @@ async function savePSSDetailsChanges() {
         
     } catch (error) {
         console.error('Error saving changes:', error);
-        alert('❌ Error saving changes: ' + error.message);
+        alert('? Error saving changes: ' + error.message);
     }
 }
 
@@ -5168,7 +5608,7 @@ function downloadPSSDetailsCSV() {
         });
         
         if (rows.length === 1) {
-            alert('ℹ️ No data to download. Load PSS Details first.');
+            alert('📊 No data to download. Load PSS Details first.');
             return;
         }
         
@@ -5192,11 +5632,11 @@ function downloadPSSDetailsCSV() {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
         
-        console.log(`✅ Downloaded ${rows.length - 1} PSS detail records`);
+        console.log(`? Downloaded ${rows.length - 1} PSS detail records`);
         
     } catch (error) {
         console.error('Download error:', error);
-        alert('❌ Error downloading CSV: ' + error.message);
+        alert('? Error downloading CSV: ' + error.message);
     }
 }
 
@@ -5236,7 +5676,7 @@ async function handleExcelPreview(event) {
     if (!file) return;
     
     const statusDiv = document.getElementById('excelUploadStatus');
-    statusDiv.innerHTML = `<div style="color: #3b82f6;">⏳ Reading "${file.name}"...</div>`;
+    statusDiv.innerHTML = `<div style="color: #3b82f6;">? Reading "${file.name}"...</div>`;
     
     try {
         const workbook = await readExcelFile(file);
@@ -5250,7 +5690,7 @@ async function handleExcelPreview(event) {
         
     } catch (error) {
         console.error('Excel read error:', error);
-        statusDiv.innerHTML = `<div style="color: #ef4444;">❌ Error reading file: ${error.message}</div>`;
+        statusDiv.innerHTML = `<div style="color: #ef4444;">? Error reading file: ${error.message}</div>`;
     }
 }
 
@@ -5290,7 +5730,7 @@ function showSheetSelector(workbook) {
     });
     
     section.style.display = 'block';
-    document.getElementById('excelUploadStatus').innerHTML = `<div style="color: #10b981;">✅ File loaded - ${workbook.SheetNames.length} sheets found</div>`;
+    document.getElementById('excelUploadStatus').innerHTML = `<div style="color: #10b981;">? File loaded - ${workbook.SheetNames.length} sheets found</div>`;
 }
 
 // Load selected sheet
@@ -5310,18 +5750,18 @@ async function switchSheetInPreview() {
     const sheetName = selector.value;
     
     if (!previewDataStore.workbook || !sheetName) {
-        alert('⚠️ No workbook loaded or sheet selected');
+        alert('📊 No workbook loaded or sheet selected');
         return;
     }
     
-    console.log('🔄 Switching to sheet:', sheetName);
+    console.log('📊 Switching to sheet:', sheetName);
     await processExcelSheet(previewDataStore.workbook, sheetName);
 }
 
 // Process Excel sheet with comparison
 async function processExcelSheet(workbook, sheetName) {
     const statusDiv = document.getElementById('excelUploadStatus');
-    statusDiv.innerHTML = `<div style="color: #3b82f6;">⏳ Processing "${sheetName}" and comparing with Firebase...</div>`;
+    statusDiv.innerHTML = `<div style="color: #3b82f6;">? Processing "${sheetName}" and comparing with Firebase...</div>`;
     
     try {
         const sheet = workbook.Sheets[sheetName];
@@ -5332,15 +5772,15 @@ async function processExcelSheet(workbook, sheetName) {
         }
         
         console.log('📊 Excel data loaded:', data.length, 'rows');
-        console.log('📋 First row sample:', data[0]);
+        console.log('📊 First row sample:', data[0]);
         
         // Get headers (normalize to lowercase for matching)
         const headers = Object.keys(data[0]);
-        console.log('📝 Headers found:', headers);
+        console.log('📊 Headers found:', headers);
         
         // Detect data type
         const dataType = detectDataType(headers);
-        console.log('🔍 Detected data type:', dataType);
+        console.log('📊 Detected data type:', dataType);
         
         if (dataType === 'unknown') {
             throw new Error('Could not identify data type. Expected columns for PSS Stations, Users, or Daily Entries.');
@@ -5348,7 +5788,7 @@ async function processExcelSheet(workbook, sheetName) {
         
         // Fetch existing Firebase data
         const existingData = await fetchExistingData(dataType);
-        console.log('💾 Fetched existing data:', Object.keys(existingData).length, 'records');
+        console.log('📊 Fetched existing data:', Object.keys(existingData).length, 'records');
         
         // Compare and mark status
         const comparedData = compareWithExisting(data, existingData, dataType, headers);
@@ -5371,15 +5811,15 @@ async function processExcelSheet(workbook, sheetName) {
         
         statusDiv.innerHTML = `
             <div style="color: #10b981; font-weight: 600;">
-                ✅ Loaded ${data.length} records - 
-                <span style="color: #10b981;">🟢 ${newCount} New</span> | 
-                <span style="color: #f59e0b;">🟡 ${changedCount} Changed</span> | 
-                <span style="color: #6b7280;">⚪ ${unchangedCount} Unchanged</span>
+                ? Loaded ${data.length} records - 
+                <span style="color: #10b981;">📊 ${newCount} New</span> | 
+                <span style="color: #f59e0b;">📊 ${changedCount} Changed</span> | 
+                <span style="color: #6b7280;">? ${unchangedCount} Unchanged</span>
             </div>`;
         
     } catch (error) {
-        console.error('❌ Process error:', error);
-        statusDiv.innerHTML = `<div style="color: #ef4444;">❌ Error: ${error.message}</div>`;
+        console.error('? Process error:', error);
+        statusDiv.innerHTML = `<div style="color: #ef4444;">? Error: ${error.message}</div>`;
     }
 }
 
@@ -5387,8 +5827,8 @@ async function processExcelSheet(workbook, sheetName) {
 function detectDataType(headers) {
     const normalized = headers.map(h => h.toLowerCase().trim().replace(/[\/\s_-]+/g, ''));
     
-    console.log('🔍 Normalized headers:', normalized);
-    console.log('📋 Original headers:', headers);
+    console.log('📊 Normalized headers:', normalized);
+    console.log('📊 Original headers:', headers);
     
     // PSS Stations: Must have name-like column + phone
     // Accept: "pss/admin name", "pssadminname", "pss name", "name", etc.
@@ -5404,11 +5844,11 @@ function detectDataType(headers) {
     const hasLineman = normalized.some(h => h.includes('lineman') || h.includes('line'));
     const hasHelper = normalized.some(h => h.includes('helper'));
     
-    console.log('🔍 Detection flags:', { hasName, hasPhone, hasFeeders, hasLineman, hasHelper });
+    console.log('📊 Detection flags:', { hasName, hasPhone, hasFeeders, hasLineman, hasHelper });
     
     // PSS Stations: Name + Phone is enough (feeders/lineman/helper are optional)
     if ((hasName || hasPhone) && headers.length >= 2) {
-        console.log('✅ Detected as PSS Stations Data');
+        console.log('? Detected as PSS Stations Data');
         return 'pss_stations';
     }
     
@@ -5434,13 +5874,13 @@ function detectDataType(headers) {
 
 // Analyze Firestore structure to understand actual data format
 async function analyzeFirestoreStructure(dataType) {
-    console.log('🔍 Analyzing Firestore structure for:', dataType);
+    console.log('📊 Analyzing Firestore structure for:', dataType);
     
     try {
         const snapshot = await db.collection(dataType).limit(5).get();
         
         if (snapshot.empty) {
-            console.log('⚠️ Collection is empty - no structure to analyze');
+            console.log('📊 Collection is empty - no structure to analyze');
             return null;
         }
         
@@ -5483,14 +5923,14 @@ async function fetchExistingData(dataType) {
         // First, analyze the structure
         const structure = await analyzeFirestoreStructure(dataType);
         if (structure) {
-            console.log('✅ Found Firestore fields:', structure.fields);
-            console.log('📦 Array fields:', structure.hasArrays);
+            console.log('? Found Firestore fields:', structure.fields);
+            console.log('📊 Array fields:', structure.hasArrays);
         }
         
         // Then fetch all data
         if (dataType === 'pss_stations') {
             const snapshot = await db.collection('pss_stations').get();
-            console.log(`📥 Fetched ${snapshot.size} PSS stations from Firestore`);
+            console.log(`📊 Fetched ${snapshot.size} PSS stations from Firestore`);
             
             // Track duplicates
             const caseMap = {}; // Track lowercase versions to detect duplicates
@@ -5508,7 +5948,7 @@ async function fetchExistingData(dataType) {
                         uppercase: caseMap[lowerDocId],
                         data: data
                     });
-                    console.warn(`⚠️ DUPLICATE FOUND: "${docId}" conflicts with "${caseMap[lowerDocId]}"`);
+                    console.warn(`📊 DUPLICATE FOUND: "${docId}" conflicts with "${caseMap[lowerDocId]}"`);
                     
                     // Merge data from lowercase into uppercase version
                     if (existing[caseMap[lowerDocId]]) {
@@ -5529,7 +5969,7 @@ async function fetchExistingData(dataType) {
                 
                 // Log structure of first document
                 if (Object.keys(existing).length === 1) {
-                    console.log('📋 First PSS station structure:', {
+                    console.log('📊 First PSS station structure:', {
                         docId: docId,
                         normalizedId: docId.toUpperCase(),
                         fields: Object.keys(data),
@@ -5544,15 +5984,15 @@ async function fetchExistingData(dataType) {
             });
             
             if (duplicates.length > 0) {
-                console.warn(`🔴 Found ${duplicates.length} duplicate PSS stations (case-insensitive):`);
+                console.warn(`📊 Found ${duplicates.length} duplicate PSS stations (case-insensitive):`);
                 duplicates.forEach(dup => {
                     console.warn(`   - "${dup.lowercase}" should be merged with "${dup.uppercase}"`);
                 });
-                console.warn(`💡 These duplicates will be cleaned up on next save`);
+                console.warn(`📊 These duplicates will be cleaned up on next save`);
             }
         } else if (dataType === 'users') {
             const snapshot = await db.collection('users').get();
-            console.log(`📥 Fetched ${snapshot.size} users from Firestore`);
+            console.log(`📊 Fetched ${snapshot.size} users from Firestore`);
             snapshot.forEach(doc => {
                 existing[doc.id] = doc.data();
             });
@@ -5565,7 +6005,7 @@ async function fetchExistingData(dataType) {
                 .where('timestamp', '>=', cutoffDate)
                 .get();
             
-            console.log(`📥 Fetched ${snapshot.size} daily entries from Firestore`);
+            console.log(`📊 Fetched ${snapshot.size} daily entries from Firestore`);
             snapshot.forEach(doc => {
                 existing[doc.id] = doc.data();
             });
@@ -5574,13 +6014,13 @@ async function fetchExistingData(dataType) {
         console.error('Error fetching existing data:', error);
     }
     
-    console.log(`💾 Total existing records: ${Object.keys(existing).length}`);
+    console.log(`📊 Total existing records: ${Object.keys(existing).length}`);
     return existing;
 }
 
 // Compare new data with existing (enhanced with detailed change tracking)
 function compareWithExisting(newData, existingData, dataType, headers) {
-    console.log('🔍 Starting comparison...');
+    console.log('📊 Starting comparison...');
     
     return newData.map((row, idx) => {
         const docId = getDocumentId(row, dataType, headers);
@@ -5592,7 +6032,7 @@ function compareWithExisting(newData, existingData, dataType, headers) {
             row._status = 'new';
             row._hasChanges = false;
             row._changeDetails = 'New record - will be created in Firestore';
-            console.log(`🟢 NEW: ${docId}`);
+            console.log(`📊 NEW: ${docId}`);
             return row;
         }
         
@@ -5605,9 +6045,9 @@ function compareWithExisting(newData, existingData, dataType, headers) {
         row._changeDetails = formatChangeDetails(changeInfo.changes);
         
         if (changeInfo.hasChanges) {
-            console.log(`🟡 CHANGED: ${docId} - ${row._changeDetails}`);
+            console.log(`📊 CHANGED: ${docId} - ${row._changeDetails}`);
         } else {
-            console.log(`⚪ UNCHANGED: ${docId}`);
+            console.log(`? UNCHANGED: ${docId}`);
         }
         
         return row;
@@ -5627,9 +6067,9 @@ function formatChangeDetails(changes) {
             if (removed.length > 0) msg += ` -${removed.length} removed`;
             return msg;
         } else if (ch.type === 'name_expansion') {
-            return `${ch.field}: Name updated (${ch.old} → ${ch.new})`;
+            return `${ch.field}: Name updated (${ch.old} ? ${ch.new})`;
         } else {
-            return `${ch.field}: ${ch.old} → ${ch.new}`;
+            return `${ch.field}: ${ch.old} ? ${ch.new}`;
         }
     });
     
@@ -5776,7 +6216,7 @@ function checkForChanges(newRow, existing, headers) {
     }
     
     if (hasChanges) {
-        console.log(`🔄 Changes detected:`, changes);
+        console.log(`📊 Changes detected:`, changes);
     }
     
     return hasChanges;
@@ -5805,7 +6245,7 @@ function checkNameSimilarity(name1, name2) {
     
     // One is contained in the other (e.g., "MUKESH" in "MUKESH CHANDRA SAHU")
     if (n1.includes(n2) || n2.includes(n1)) {
-        console.log(`📝 Name similarity detected: "${name1}" ≈ "${name2}"`);
+        console.log(`📊 Name similarity detected: "${name1}" � "${name2}"`);
         return true;
     }
     
@@ -5814,7 +6254,7 @@ function checkNameSimilarity(name1, name2) {
     const words2 = n2.split(/\s+/);
     
     if (words1[0] === words2[0] && words1[0].length > 3) {
-        console.log(`📝 First name matches: "${name1}" ≈ "${name2}"`);
+        console.log(`📊 First name matches: "${name1}" � "${name2}"`);
         return true;
     }
     
@@ -5874,10 +6314,10 @@ function displayPreviewTable(dataType, headers, rows, workbook) {
         let statusTitle = '';
         
         if (row._status === 'new') {
-            statusBadge = '<span class="status-badge status-new">🟢 New</span>';
+            statusBadge = '<span class="status-badge status-new">📊 New</span>';
             statusTitle = 'New record - will be created';
         } else if (row._status === 'changed') {
-            statusBadge = '<span class="status-badge status-changed">🟡 Changed</span>';
+            statusBadge = '<span class="status-badge status-changed">📊 Changed</span>';
             statusTitle = row._changeDetails || 'Has changes';
             
             // Add detailed changes if available
@@ -5886,20 +6326,20 @@ function displayPreviewTable(dataType, headers, rows, workbook) {
                     if (ch.type === 'array') {
                         let detail = `${ch.field}:\n`;
                         if (ch.added && ch.added.length > 0) {
-                            detail += `  ➕ Add: ${ch.added.join(', ')}\n`;
+                            detail += `  ? Add: ${ch.added.join(', ')}\n`;
                         }
                         if (ch.removed && ch.removed.length > 0) {
-                            detail += `  ➖ Remove: ${ch.removed.join(', ')}`;
+                            detail += `  ? Remove: ${ch.removed.join(', ')}`;
                         }
                         return detail;
                     } else {
-                        return `${ch.field}: ${ch.old} → ${ch.new}`;
+                        return `${ch.field}: ${ch.old} ? ${ch.new}`;
                     }
                 }).join('\n');
                 statusTitle = changeList;
             }
         } else {
-            statusBadge = '<span class="status-badge status-unchanged">⚪ Same</span>';
+            statusBadge = '<span class="status-badge status-unchanged">? Same</span>';
             statusTitle = 'No changes - already in Firestore';
         }
         
@@ -5949,8 +6389,8 @@ function displayPreviewTable(dataType, headers, rows, workbook) {
 
 function getDataTypeLabel(type) {
     const labels = {
-        'pss_stations': '🏢 PSS Stations Data',
-        'users': '👥 User/Staff Data',
+        'pss_stations': '📊 PSS Stations Data',
+        'users': '📊 User/Staff Data',
         'daily_entries': '📊 Daily Entries Data'
     };
     return labels[type] || 'Unknown Data';
@@ -5984,11 +6424,11 @@ async function savePreviewData() {
         snapshot.forEach(doc => {
             existingData[doc.id.toUpperCase()] = doc.data();
         });
-        console.log(`📥 Found ${Object.keys(existingData).length} existing records`);
+        console.log(`📊 Found ${Object.keys(existingData).length} existing records`);
         
         // Update/create records from Excel
         statusDiv.innerHTML = '<div style="color: #10b981;">Step 2/2: Updating data from Excel...</div>';
-        console.log(`📤 Processing ${previewDataStore.rows.length} records...`);
+        console.log(`📊 Processing ${previewDataStore.rows.length} records...`);
         
         for (const row of previewDataStore.rows) {
             try {
@@ -5996,7 +6436,7 @@ async function savePreviewData() {
                 const docId = getDocumentId(row, previewDataStore.type, headers);
                 
                 if (!docId) {
-                    console.warn('⚠️ Skipping row - no document ID:', row);
+                    console.warn('📊 Skipping row - no document ID:', row);
                     errorCount++;
                     errors.push(`Row missing name/ID: ${JSON.stringify(row)}`);
                     continue;
@@ -6015,21 +6455,21 @@ async function savePreviewData() {
                 
                 if (isNew) {
                     newCount++;
-                    console.log(`🆕 Created: ${docId}`);
+                    console.log(`📊 Created: ${docId}`);
                 } else {
                     updatedCount++;
-                    console.log(`✅ Updated: ${docId}`);
+                    console.log(`? Updated: ${docId}`);
                 }
                 
             } catch (rowError) {
-                console.error('❌ Error saving row:', row, rowError);
+                console.error('? Error saving row:', row, rowError);
                 errorCount++;
                 errors.push(`${row._docId || 'Unknown'}: ${rowError.message}`);
             }
         }
         
         // Show completion report
-        statusDiv.innerHTML = '<div style="color: #10b981;">✅ Upload complete!</div>';
+        statusDiv.innerHTML = '<div style="color: #10b981;">? Upload complete!</div>';
         
         // Generate detailed report
         const reportHtml = generateUploadReportMerge(newCount, updatedCount, errorCount, errors);
@@ -6041,7 +6481,7 @@ async function savePreviewData() {
         }, 1000);
         
     } catch (error) {
-        console.error('❌ Upload failed:', error);
+        console.error('? Upload failed:', error);
         statusDiv.innerHTML = `<div style="color: #ef4444;">Upload failed: ${error.message}</div>`;
     }
 }
@@ -6125,7 +6565,7 @@ function generateUploadReportMerge(newCount, updatedCount, errors, errorList) {
             
             <div style="background: rgba(16,185,129,0.2); border-left: 4px solid #10b981; padding: 1rem; border-radius: 6px; margin-bottom: 1rem;">
                 <p style="margin: 0; color: white; font-weight: 600; font-size: 14px;">
-                    ✅ Success! ${successCount} records processed (${newCount} new, ${updatedCount} updated).
+                    ? Success! ${successCount} records processed (${newCount} new, ${updatedCount} updated).
                 </p>
             </div>
     `;
@@ -6133,9 +6573,9 @@ function generateUploadReportMerge(newCount, updatedCount, errors, errorList) {
     if (errors > 0 && errorList.length > 0) {
         html += `
             <div style="background: rgba(239,68,68,0.1); border-left: 4px solid #ef4444; padding: 1rem; border-radius: 6px; margin-top: 1rem;">
-                <p style="margin: 0 0 0.5rem 0; color: #ef4444; font-weight: 600; font-size: 14px;">⚠️ Errors (${errors}):</p>
+                <p style="margin: 0 0 0.5rem 0; color: #ef4444; font-weight: 600; font-size: 14px;">📊 Errors (${errors}):</p>
                 <div style="max-height: 150px; overflow-y: auto; font-size: 12px; color: rgba(255,255,255,0.8);">
-                    ${errorList.map(err => `<div style="margin: 0.25rem 0;">• ${err}</div>`).join('')}
+                    ${errorList.map(err => `<div style="margin: 0.25rem 0;">� ${err}</div>`).join('')}
                 </div>
             </div>
         `;
@@ -6146,7 +6586,7 @@ function generateUploadReportMerge(newCount, updatedCount, errors, errorList) {
                 <button onclick="document.getElementById('uploadReportModal').style.display='none'" 
                         class="btn-primary" 
                         style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 12px 32px; font-size: 15px;">
-                    ✅ Done
+                    ? Done
                 </button>
             </div>
         </div>
@@ -6231,7 +6671,7 @@ function generateUploadReport(deleted, saved, errors, errorList) {
             
             <div style="background: rgba(16,185,129,0.2); border-left: 4px solid #10b981; padding: 1rem; border-radius: 6px; margin-bottom: 1rem;">
                 <p style="margin: 0; color: white; font-weight: 600; font-size: 14px;">
-                    ✅ Success! All old data deleted and ${saved} new records uploaded from Excel.
+                    ? Success! All old data deleted and ${saved} new records uploaded from Excel.
                 </p>
             </div>
     `;
@@ -6239,9 +6679,9 @@ function generateUploadReport(deleted, saved, errors, errorList) {
     if (errors > 0 && errorList.length > 0) {
         html += `
             <div style="background: rgba(239,68,68,0.1); border-left: 4px solid #ef4444; padding: 1rem; border-radius: 6px; margin-top: 1rem;">
-                <p style="margin: 0 0 0.5rem 0; color: #ef4444; font-weight: 600; font-size: 14px;">⚠️ Errors (${errors}):</p>
+                <p style="margin: 0 0 0.5rem 0; color: #ef4444; font-weight: 600; font-size: 14px;">📊 Errors (${errors}):</p>
                 <div style="max-height: 150px; overflow-y: auto; font-size: 12px; color: rgba(255,255,255,0.8);">
-                    ${errorList.map(err => `<div style="margin: 0.25rem 0;">• ${err}</div>`).join('')}
+                    ${errorList.map(err => `<div style="margin: 0.25rem 0;">� ${err}</div>`).join('')}
                 </div>
             </div>
         `;
@@ -6252,7 +6692,7 @@ function generateUploadReport(deleted, saved, errors, errorList) {
                 <button onclick="document.getElementById('uploadReportModal').style.display='none'" 
                         class="btn-primary" 
                         style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 12px 32px; font-size: 15px;">
-                    ✅ Done
+                    ? Done
                 </button>
             </div>
         </div>
@@ -6292,7 +6732,7 @@ function normalizeRowData(row, dataType, headers, existingData = {}) {
     const normalized = {};
     const headerMap = headers.map(h => h.toLowerCase().trim().replace(/[\/\s_-]+/g, ''));
     
-    console.log('🔄 Normalizing row with existing data:', { row, existingData });
+    console.log('📊 Normalizing row with existing data:', { row, existingData });
     
     // Copy all fields, excluding internal ones
     headers.forEach((header, idx) => {
@@ -6335,7 +6775,7 @@ function normalizeRowData(row, dataType, headers, existingData = {}) {
                     const removed = existingLinemen.filter(e => !newLinemen.includes(e));
                     const added = newLinemen.filter(n => !existingLinemen.includes(n));
                     
-                    console.log('👷 Lineman changes:', { 
+                    console.log('📊 Lineman changes:', { 
                         existing: existingLinemen, 
                         new: newLinemen,
                         removed: removed.length > 0 ? removed : 'none',
@@ -6344,7 +6784,7 @@ function normalizeRowData(row, dataType, headers, existingData = {}) {
                 } else if (existingData.lineman) {
                     // Excel cell is empty - keep existing
                     normalized.lineman = existingData.lineman;
-                    console.log('👷 Lineman: Keeping existing (Excel empty)');
+                    console.log('📊 Lineman: Keeping existing (Excel empty)');
                 }
             } else if (normalizedKey.includes('helper')) {
                 // REPLACE helper array (not merge) - Excel is the source of truth
@@ -6359,7 +6799,7 @@ function normalizeRowData(row, dataType, headers, existingData = {}) {
                     const removed = existingHelpers.filter(e => !newHelpers.includes(e));
                     const added = newHelpers.filter(n => !existingHelpers.includes(n));
                     
-                    console.log('🤝 Helper changes:', { 
+                    console.log('📊 Helper changes:', { 
                         existing: existingHelpers, 
                         new: newHelpers,
                         removed: removed.length > 0 ? removed : 'none',
@@ -6368,7 +6808,7 @@ function normalizeRowData(row, dataType, headers, existingData = {}) {
                 } else if (existingData.helper) {
                     // Excel cell is empty - keep existing
                     normalized.helper = existingData.helper;
-                    console.log('🤝 Helper: Keeping existing (Excel empty)');
+                    console.log('📊 Helper: Keeping existing (Excel empty)');
                 }
             } else if (normalizedKey.includes('role')) {
                 const newRole = String(value || '').trim();
@@ -6399,14 +6839,14 @@ function normalizeRowData(row, dataType, headers, existingData = {}) {
     Object.keys(existingData).forEach(key => {
         if (normalized[key] === undefined && !key.startsWith('_') && key !== 'lastUpdated') {
             normalized[key] = existingData[key];
-            console.log(`📦 Preserving existing field: ${key} = ${existingData[key]}`);
+            console.log(`📊 Preserving existing field: ${key} = ${existingData[key]}`);
         }
     });
     
     // Add timestamp
     normalized.lastUpdated = firebase.firestore.FieldValue.serverTimestamp();
     
-    console.log('✅ Final normalized data:', normalized);
+    console.log('? Final normalized data:', normalized);
     return normalized;
 }
 
@@ -6425,3 +6865,5 @@ function cancelPreview() {
         workbook: null
     };
 }
+
+

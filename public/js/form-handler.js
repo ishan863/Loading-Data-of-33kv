@@ -319,20 +319,50 @@ function renderICSection(title, prefix) {
 }
 
 // ============================================
-// STEP 3: PTR DATA (PTR-1 & PTR-2, 33kV & 11kV)
+// STEP 3: PTR DATA (DYNAMIC based on PSS ptrCount)
 // ============================================
 
 function renderStep3_PTRData() {
+    // Get PSS station from formData
+    const selectedPSS = formState.formData.pssStation || (window.appState && window.appState.currentUser ? window.appState.currentUser.pssStation : null);
+    
+    console.log('🔌 PTR RENDERING DEBUG:');
+    console.log('  Selected PSS:', selectedPSS);
+    console.log('  formState.formData:', formState.formData);
+    console.log('  appState exists:', !!window.appState);
+    console.log('  pssConfig exists:', !!(window.appState && window.appState.pssConfig));
+    
+    // Get PTR count from PSS config
+    let ptrCount = 2; // Default
+    if (window.appState && window.appState.pssConfig && selectedPSS && window.appState.pssConfig[selectedPSS]) {
+        const pssConfig = window.appState.pssConfig[selectedPSS];
+        ptrCount = pssConfig.ptrCount || 2;
+        console.log('  ✅ Found PSS config, ptrCount:', ptrCount);
+    } else {
+        console.warn('  ⚠️ PSS config not found, using default ptrCount:', ptrCount);
+        if (window.appState && window.appState.pssConfig) {
+            console.log('  Available PSS configs:', Object.keys(window.appState.pssConfig));
+        }
+    }
+    
+    console.log(`🔌 PTR Data - PSS: ${selectedPSS}, PTR Count: ${ptrCount}`);
+    
+    // Generate PTR sections dynamically based on count
+    let ptrSections = '';
+    for (let i = 1; i <= ptrCount; i++) {
+        ptrSections += renderPTRSection(`PTR-${i} 33kV`, `ptr${i}_33kv`);
+    }
+    for (let i = 1; i <= ptrCount; i++) {
+        ptrSections += renderPTRSection(`PTR-${i} 11kV`, `ptr${i}_11kv`);
+    }
+    
     return `
         <div class="step-header">
             <h2 class="step-title">🔌 PTR Data (33kV & 11kV)</h2>
-            <p class="step-description">Enter voltage and load data for PTR-1 and PTR-2</p>
+            <p class="step-description">Enter voltage and load data for ${ptrCount} PTR${ptrCount > 1 ? 's' : ''} (33kV & 11kV)</p>
         </div>
         
-        ${renderPTRSection('PTR-1 33kV', 'ptr1_33kv')}
-        ${renderPTRSection('PTR-2 33kV', 'ptr2_33kv')}
-        ${renderPTRSection('PTR-1 11kV', 'ptr1_11kv')}
-        ${renderPTRSection('PTR-2 11kV', 'ptr2_11kv')}
+        ${ptrSections}
     `;
 }
 
@@ -354,21 +384,39 @@ function renderStep4_FeederData() {
     console.log('  pssConfig exists:', !!(window.appState && window.appState.pssConfig));
     console.log('  pssConfig keys:', window.appState && window.appState.pssConfig ? Object.keys(window.appState.pssConfig) : 'none');
     
-    // Get feeder count from PSS config
+    // Get feeder configuration from PSS config (NEW: array of feeder objects with names)
     let feedersArray = [];
+    let ptrCount = 2; // Default PTR count
+    
     if (window.appState && window.appState.pssConfig && selectedPSS && window.appState.pssConfig[selectedPSS]) {
         const pssConfig = window.appState.pssConfig[selectedPSS];
         console.log('  ✅ Found PSS config:', pssConfig);
-        if (typeof pssConfig.feeders === 'number') {
-            // If feeders is a number, create array [1, 2, 3, ...]
-            feedersArray = Array.from({length: pssConfig.feeders}, (_, i) => i + 1);
-            console.log('  ✅ Using number format:', pssConfig.feeders, 'feeders');
+        
+        // Get PTR count
+        ptrCount = pssConfig.ptrCount || 2;
+        console.log('  📊 PTR Count:', ptrCount);
+        
+        // NEW: Handle array of feeder objects with names
+        if (Array.isArray(pssConfig.feeders) && pssConfig.feeders.length > 0 && typeof pssConfig.feeders[0] === 'object') {
+            // New format: array of {id, name, ptrNo}
+            feedersArray = pssConfig.feeders;
+            console.log('  ✅ Using feeder objects:', feedersArray.length, 'feeders with names');
+        } else if (typeof pssConfig.feeders === 'number') {
+            // Old format: just a number
+            feedersArray = Array.from({length: pssConfig.feeders}, (_, i) => ({
+                id: i + 1,
+                name: `Feeder ${i + 1}`,
+                ptrNo: ((i % ptrCount) + 1)
+            }));
+            console.log('  ⚠️ Using number format (legacy):', pssConfig.feeders, 'feeders');
         } else if (Array.isArray(pssConfig.feeders)) {
-            // If feeders is an array, use its length
-            feedersArray = Array.from({length: pssConfig.feeders.length}, (_, i) => i + 1);
-            console.log('  ✅ Using array format:', pssConfig.feeders.length, 'feeders');
-        } else {
-            console.warn('  ⚠️ Unexpected feeders format:', typeof pssConfig.feeders, pssConfig.feeders);
+            // Old format: array of strings or numbers
+            feedersArray = Array.from({length: pssConfig.feeders.length}, (_, i) => ({
+                id: i + 1,
+                name: `Feeder ${i + 1}`,
+                ptrNo: ((i % ptrCount) + 1)
+            }));
+            console.log('  ⚠️ Using array format (legacy):', pssConfig.feeders.length, 'feeders');
         }
     } else {
         console.error('  ❌ PSS config not found!');
@@ -378,11 +426,20 @@ function renderStep4_FeederData() {
     // Fallback to 6 feeders if config not available
     if (feedersArray.length === 0) {
         console.warn(`⚠️ No PSS config found for ${selectedPSS}, defaulting to 6 feeders`);
-        feedersArray = [1, 2, 3, 4, 5, 6];
+        feedersArray = Array.from({length: 6}, (_, i) => ({
+            id: i + 1,
+            name: `Feeder ${i + 1}`,
+            ptrNo: ((i % ptrCount) + 1)
+        }));
     }
     
     const feederCount = feedersArray.length;
     console.log('  📊 Final feeder count:', feederCount);
+    console.log('  📊 Feeders array:', feedersArray);
+    
+    // Store in formState for use in submit
+    formState.feedersConfig = feedersArray;
+    formState.ptrCount = ptrCount;
     
     return `
         <div class="step-header">
@@ -391,28 +448,57 @@ function renderStep4_FeederData() {
         </div>
         
         <div class="feeders-grid">
-            ${feedersArray.map(num => renderFeederCard(num)).join('')}
+            ${feedersArray.map(feeder => renderFeederCard(feeder, ptrCount)).join('')}
         </div>
     `;
 }
 
-function renderFeederCard(feederNum) {
+function renderFeederCard(feeder, ptrCount) {
+    // DEFENSIVE: Extract values with multiple fallbacks
+    let feederNum, feederName, defaultPTR;
+    
+    if (typeof feeder === 'object' && feeder !== null) {
+        feederNum = feeder.id || 1;
+        feederName = feeder.name || `Feeder ${feederNum}`;
+        defaultPTR = feeder.ptrNo || 1;
+    } else {
+        feederNum = feeder;
+        feederName = `Feeder ${feeder}`;
+        defaultPTR = 1;
+    }
+    
     const prefix = `feeder${feederNum}`;
+    
+    // Ensure feederName is a string
+    feederName = String(feederName);
+    
+    console.log(`🔧 Rendering feeder card:`, {
+        feederObject: feeder,
+        feederNum: feederNum,
+        feederName: feederName,
+        defaultPTR: defaultPTR,
+        feederType: typeof feeder,
+        hasName: feeder && feeder.name,
+        rawName: feeder && feeder.name
+    });
+    
+    // Generate PTR options dynamically based on ptrCount
+    let ptrOptions = '<option value="">Select PTR...</option>';
+    for (let i = 1; i <= ptrCount; i++) {
+        const selected = formState.formData[prefix + '_ptr_no'] === String(i) || (formState.formData[prefix + '_ptr_no'] === '' && i === defaultPTR) ? 'selected' : '';
+        ptrOptions += `<option value="${i}" ${selected}>PTR-${i}</option>`;
+    }
     
     return `
         <div class="feeder-card">
-            <h3 class="feeder-header">Feeder ${feederNum}</h3>
+            <h3 class="feeder-header">⚡ ${feederName}</h3>
             
-            <!-- PTR Selection -->
+            <!-- PTR Selection (Dynamic based on PSS config) -->
             <div class="form-row">
                 <div class="form-group ptr-dropdown-group">
                     <label class="form-label">PTR Number</label>
                     <select class="form-select" id="${prefix}_ptr_no">
-                        <option value="">Select PTR...</option>
-                        <option value="1" ${formState.formData[prefix + '_ptr_no'] === '1' ? 'selected' : ''}>PTR-1</option>
-                        <option value="2" ${formState.formData[prefix + '_ptr_no'] === '2' ? 'selected' : ''}>PTR-2</option>
-                        <option value="3" ${formState.formData[prefix + '_ptr_no'] === '3' ? 'selected' : ''}>PTR-3</option>
-                        <option value="4" ${formState.formData[prefix + '_ptr_no'] === '4' ? 'selected' : ''}>PTR-4</option>
+                        ${ptrOptions}
                     </select>
                 </div>
             </div>
@@ -734,14 +820,23 @@ async function submitForm() {
     // Get PSS station and feeder count
     const selectedPSS = formState.formData.pssStation || (window.appState && window.appState.currentUser ? window.appState.currentUser.pssStation : null);
     let feederCount = 6; // default
+    let ptrCount = 2; // default
+    
     if (window.appState && window.appState.pssConfig && selectedPSS && window.appState.pssConfig[selectedPSS]) {
         const pssConfig = window.appState.pssConfig[selectedPSS];
+        
+        // Get PTR count
+        ptrCount = pssConfig.ptrCount || 2;
+        
+        // Get feeder count
         if (typeof pssConfig.feeders === 'number') {
             feederCount = pssConfig.feeders;
         } else if (Array.isArray(pssConfig.feeders)) {
             feederCount = pssConfig.feeders.length;
         }
     }
+    
+    console.log(`📊 Submit - PSS: ${selectedPSS}, PTR Count: ${ptrCount}, Feeder Count: ${feederCount}`);
     
     // Validate feeder data before submitting
     const validationErrors = [];
@@ -771,7 +866,16 @@ async function submitForm() {
     const feedersData = {};
     for (let i = 1; i <= feederCount; i++) {
         const prefix = `feeder${i}`;
-        const feederName = `Feeder-${i}`;
+        const feederKey = `Feeder-${i}`;
+        
+        // Get feeder name from feedersConfig if available
+        let actualFeederName = `Feeder-${i}`; // Default
+        if (formState.feedersConfig && Array.isArray(formState.feedersConfig)) {
+            const feederConfig = formState.feedersConfig.find(f => f.id === i);
+            if (feederConfig && feederConfig.name) {
+                actualFeederName = feederConfig.name;
+            }
+        }
         
         // Only include feeder if at least one field has data
         const hasData = formState.formData[`${prefix}_voltage_max`] || 
@@ -780,7 +884,8 @@ async function submitForm() {
                        formState.formData[`${prefix}_load_min`];
         
         if (hasData) {
-            feedersData[feederName] = {
+            feedersData[feederKey] = {
+                name: actualFeederName,  // ADD feeder name
                 maxVoltage: parseFloat(formState.formData[`${prefix}_voltage_max`]) || 0,
                 maxVoltageTime: formState.formData[`${prefix}_voltage_max_time`] || '',
                 minVoltage: parseFloat(formState.formData[`${prefix}_voltage_min`]) || 0,
@@ -797,28 +902,111 @@ async function submitForm() {
     console.log('🔌 Collected Feeder Data:', feedersData);
     console.log('🔌 Number of feeders with data:', Object.keys(feedersData).length);
     
-    // Prepare data for Firestore - remove individual feeder fields and add structured feeders object
-    const submissionData = { ...formState.formData };
+    // Collect I/C data into proper structure
+    const ic1Data = {
+        maxVoltage: parseFloat(formState.formData['ic1_33kv_voltage_max']) || 0,
+        maxVoltageTime: formState.formData['ic1_33kv_voltage_max_time'] || '',
+        minVoltage: parseFloat(formState.formData['ic1_33kv_voltage_min']) || 0,
+        minVoltageTime: formState.formData['ic1_33kv_voltage_min_time'] || '',
+        maxLoad: parseFloat(formState.formData['ic1_33kv_load_max']) || 0,
+        maxLoadTime: formState.formData['ic1_33kv_load_max_time'] || '',
+        minLoad: parseFloat(formState.formData['ic1_33kv_load_min']) || 0,
+        minLoadTime: formState.formData['ic1_33kv_load_min_time'] || ''
+    };
     
-    // Remove individual feeder fields from root level
-    for (let i = 1; i <= feederCount; i++) {
-        const prefix = `feeder${i}`;
-        delete submissionData[`${prefix}_voltage_max`];
-        delete submissionData[`${prefix}_voltage_max_time`];
-        delete submissionData[`${prefix}_voltage_min`];
-        delete submissionData[`${prefix}_voltage_min_time`];
-        delete submissionData[`${prefix}_load_max`];
-        delete submissionData[`${prefix}_load_max_time`];
-        delete submissionData[`${prefix}_load_min`];
-        delete submissionData[`${prefix}_load_min_time`];
-        delete submissionData[`${prefix}_ptr_no`];
+    const ic2Data = {
+        maxVoltage: parseFloat(formState.formData['ic2_33kv_voltage_max']) || 0,
+        maxVoltageTime: formState.formData['ic2_33kv_voltage_max_time'] || '',
+        minVoltage: parseFloat(formState.formData['ic2_33kv_voltage_min']) || 0,
+        minVoltageTime: formState.formData['ic2_33kv_voltage_min_time'] || '',
+        maxLoad: parseFloat(formState.formData['ic2_33kv_load_max']) || 0,
+        maxLoadTime: formState.formData['ic2_33kv_load_max_time'] || '',
+        minLoad: parseFloat(formState.formData['ic2_33kv_load_min']) || 0,
+        minLoadTime: formState.formData['ic2_33kv_load_min_time'] || ''
+    };
+    
+    // Collect PTR data dynamically based on ptrCount
+    const ptrData = {};
+    for (let i = 1; i <= ptrCount; i++) {
+        // 33kV PTR
+        const ptr33kvPrefix = `ptr${i}_33kv`;
+        ptrData[`ptr${i}_33kv`] = {
+            maxVoltage: parseFloat(formState.formData[`${ptr33kvPrefix}_voltage_max`]) || 0,
+            maxVoltageTime: formState.formData[`${ptr33kvPrefix}_voltage_max_time`] || '',
+            minVoltage: parseFloat(formState.formData[`${ptr33kvPrefix}_voltage_min`]) || 0,
+            minVoltageTime: formState.formData[`${ptr33kvPrefix}_voltage_min_time`] || '',
+            maxLoad: parseFloat(formState.formData[`${ptr33kvPrefix}_load_max`]) || 0,
+            maxLoadTime: formState.formData[`${ptr33kvPrefix}_load_max_time`] || '',
+            minLoad: parseFloat(formState.formData[`${ptr33kvPrefix}_load_min`]) || 0,
+            minLoadTime: formState.formData[`${ptr33kvPrefix}_load_min_time`] || ''
+        };
+        
+        // 11kV PTR
+        const ptr11kvPrefix = `ptr${i}_11kv`;
+        ptrData[`ptr${i}_11kv`] = {
+            maxVoltage: parseFloat(formState.formData[`${ptr11kvPrefix}_voltage_max`]) || 0,
+            maxVoltageTime: formState.formData[`${ptr11kvPrefix}_voltage_max_time`] || '',
+            minVoltage: parseFloat(formState.formData[`${ptr11kvPrefix}_voltage_min`]) || 0,
+            minVoltageTime: formState.formData[`${ptr11kvPrefix}_voltage_min_time`] || '',
+            maxLoad: parseFloat(formState.formData[`${ptr11kvPrefix}_load_max`]) || 0,
+            maxLoadTime: formState.formData[`${ptr11kvPrefix}_load_max_time`] || '',
+            minLoad: parseFloat(formState.formData[`${ptr11kvPrefix}_load_min`]) || 0,
+            minLoadTime: formState.formData[`${ptr11kvPrefix}_load_min_time`] || ''
+        };
     }
     
-    // Add structured feeder data
-    submissionData.feeders = feedersData;
-    submissionData.timestamp = firebase.firestore.FieldValue.serverTimestamp();
-    submissionData.phoneNumber = appState.user.phoneNumber;
-    submissionData.submittedBy = appState.user.name;
+    console.log('🔌 Collected PTR Data:', ptrData);
+    
+    // Collect Station Transformer data
+    const stationTransformerData = {
+        maxVoltage: parseFloat(formState.formData['stationTransformer_voltage_max']) || 0,
+        maxVoltageTime: formState.formData['stationTransformer_voltage_max_time'] || '',
+        minVoltage: parseFloat(formState.formData['stationTransformer_voltage_min']) || 0,
+        minVoltageTime: formState.formData['stationTransformer_voltage_min_time'] || '',
+        maxLoad: parseFloat(formState.formData['stationTransformer_load_max']) || 0,
+        maxLoadTime: formState.formData['stationTransformer_load_max_time'] || '',
+        minLoad: parseFloat(formState.formData['stationTransformer_load_min']) || 0,
+        minLoadTime: formState.formData['stationTransformer_load_min_time'] || ''
+    };
+    
+    // Collect Charger data
+    const chargerData = {
+        maxVoltage: parseFloat(formState.formData['charger_voltage_max']) || 0,
+        maxVoltageTime: formState.formData['charger_voltage_max_time'] || '',
+        minVoltage: parseFloat(formState.formData['charger_voltage_min']) || 0,
+        minVoltageTime: formState.formData['charger_voltage_min_time'] || '',
+        maxLoad: parseFloat(formState.formData['charger_load_max']) || 0,
+        maxLoadTime: formState.formData['charger_load_max_time'] || '',
+        minLoad: parseFloat(formState.formData['charger_load_min']) || 0,
+        minLoadTime: formState.formData['charger_load_min_time'] || ''
+    };
+    
+    // Prepare data for Firestore - START WITH CLEAN OBJECT
+    const submissionData = {
+        // Basic info
+        pssStation: formState.formData.pssStation,
+        personnelName: formState.formData.personnelName,
+        date: formState.formData.date,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        phoneNumber: appState.user.phoneNumber,
+        submittedBy: appState.user.name,
+        
+        // I/C Data
+        ic1: ic1Data,
+        ic2: ic2Data,
+        
+        // PTR Data (spread dynamic PTR objects)
+        ...ptrData,
+        
+        // Feeders
+        feeders: feedersData,
+        
+        // Equipment
+        stationTransformer: stationTransformerData,
+        charger: chargerData
+    };
+    
+    console.log('📤 Final Submission Data:', submissionData);
     
     try {
         if (formState.isEditing && formState.editingId) {

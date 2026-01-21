@@ -5,6 +5,10 @@
 
 let chatHistory = [];
 let pssDataContext = [];
+let pssDataLastUpdated = null;
+let pssIndexCache = null;
+let pssNamesSortedCache = [];
+let chatbotInitialized = false; // Guard against double init
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
@@ -18,76 +22,99 @@ const DEFAULT_GROQ_KEY = ''; // Add your Groq API key here
 // ============================================
 
 function initializeChatbot() {
+    if (chatbotInitialized) {
+        console.log('🤖 Chatbot already initialized, skipping...');
+        return;
+    }
     console.log('🤖 Initializing AI Chatbot Assistant...');
     
-    // Load saved API key or use default
-    const savedApiKey = localStorage.getItem('openrouterApiKey');
-    if (savedApiKey) {
-        document.getElementById('openrouterApiKey').value = savedApiKey;
-    } else {
-        // Set default OpenRouter key
-        localStorage.setItem('openrouterApiKey', DEFAULT_OPENROUTER_KEY);
-        document.getElementById('openrouterApiKey').value = DEFAULT_OPENROUTER_KEY;
-    }
-    
-    // Load saved Groq key or use default
-    const savedGroqKey = localStorage.getItem('groqApiKey');
-    if (savedGroqKey) {
-        document.getElementById('groqApiKey').value = savedGroqKey;
-    } else {
-        // Set default Groq key
-        localStorage.setItem('groqApiKey', DEFAULT_GROQ_KEY);
-        document.getElementById('groqApiKey').value = DEFAULT_GROQ_KEY;
-    }
-    
-    // Load saved model preference or set default to Groq
-    const savedModel = localStorage.getItem('aiModel');
-    if (savedModel) {
-        document.getElementById('aiModelSelect').value = savedModel;
-    } else {
-        // Default to Groq Llama 3.3 70B - TESTED & WORKING
-        localStorage.setItem('aiModel', 'groq/llama-3.3-70b-versatile');
-        document.getElementById('aiModelSelect').value = 'groq/llama-3.3-70b-versatile';
-    }
-    
-    // Load chat history from session
-    const savedHistory = sessionStorage.getItem('chatHistory');
-    if (savedHistory) {
-        chatHistory = JSON.parse(savedHistory);
-        renderChatHistory();
-    }
-    
-    // Event Listeners
-    document.getElementById('saveApiKeyBtn').addEventListener('click', saveApiKey);
-    document.getElementById('sendChatBtn').addEventListener('click', sendMessage);
-    document.getElementById('clearChatBtn').addEventListener('click', clearChat);
-    document.getElementById('testChatBtn').addEventListener('click', testChatbot);
-    
-    // Chat input enter key
-    const chatInput = document.getElementById('chatInput');
-    chatInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            sendMessage();
+    try {
+        // Load saved API key or use default (settings tab elements)
+        const openrouterKeyInput = document.getElementById('openrouterApiKey');
+        const groqKeyInput = document.getElementById('groqApiKey');
+        const modelSelect = document.getElementById('aiModelSelect');
+        
+        const savedApiKey = localStorage.getItem('openrouterApiKey');
+        if (openrouterKeyInput) {
+            openrouterKeyInput.value = savedApiKey || DEFAULT_OPENROUTER_KEY;
+            if (!savedApiKey) localStorage.setItem('openrouterApiKey', DEFAULT_OPENROUTER_KEY);
         }
-    });
-    
-    // Auto-resize textarea
-    chatInput.addEventListener('input', () => {
-        chatInput.style.height = 'auto';
-        chatInput.style.height = chatInput.scrollHeight + 'px';
-    });
-    
-    // Quick suggestion chips
-    document.querySelectorAll('.suggestion-chip').forEach(chip => {
-        chip.addEventListener('click', () => {
-            const query = chip.getAttribute('data-query');
-            document.getElementById('chatInput').value = query;
-            sendMessage();
+        
+        // Load saved Groq key or use default
+        const savedGroqKey = localStorage.getItem('groqApiKey');
+        if (groqKeyInput) {
+            groqKeyInput.value = savedGroqKey || DEFAULT_GROQ_KEY;
+            if (!savedGroqKey) localStorage.setItem('groqApiKey', DEFAULT_GROQ_KEY);
+        }
+        
+        // Load saved model preference or set default to Groq
+        const savedModel = localStorage.getItem('aiModel');
+        if (modelSelect) {
+            modelSelect.value = savedModel || 'groq/llama-3.3-70b-versatile';
+            if (!savedModel) localStorage.setItem('aiModel', 'groq/llama-3.3-70b-versatile');
+        }
+        
+        // Load chat history from session (limit to last 20 messages to avoid quota issues)
+        try {
+            const savedHistory = sessionStorage.getItem('chatHistory');
+            if (savedHistory) {
+                chatHistory = JSON.parse(savedHistory);
+                // Limit history to last 20 messages
+                if (chatHistory.length > 20) {
+                    chatHistory = chatHistory.slice(-20);
+                    safeSaveHistory();
+                }
+                renderChatHistory();
+            }
+        } catch (e) {
+            console.warn('⚠️ Clearing corrupted chat history:', e.message);
+            sessionStorage.removeItem('chatHistory');
+            chatHistory = [];
+        }
+        
+        // Event Listeners - with null checks
+        const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
+        const sendChatBtn = document.getElementById('sendChatBtn');
+        const clearChatBtn = document.getElementById('clearChatBtn');
+        const testChatBtn = document.getElementById('testChatBtn');
+        const chatInput = document.getElementById('chatInput');
+        
+        if (saveApiKeyBtn) saveApiKeyBtn.addEventListener('click', saveApiKey);
+        if (sendChatBtn) sendChatBtn.addEventListener('click', sendMessage);
+        if (clearChatBtn) clearChatBtn.addEventListener('click', clearChat);
+        if (testChatBtn) testChatBtn.addEventListener('click', testChatbot);
+        
+        // Chat input enter key
+        if (chatInput) {
+            chatInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+            
+            // Auto-resize textarea
+            chatInput.addEventListener('input', () => {
+                chatInput.style.height = 'auto';
+                chatInput.style.height = chatInput.scrollHeight + 'px';
+            });
+        }
+        
+        // Quick suggestion chips
+        document.querySelectorAll('.suggestion-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                const query = chip.getAttribute('data-query');
+                const input = document.getElementById('chatInput');
+                if (input) input.value = query;
+                sendMessage();
+            });
         });
-    });
-    
-    console.log('✅ Chatbot initialized');
+        
+        chatbotInitialized = true;
+        console.log('✅ Chatbot initialized - Send:', !!sendChatBtn, 'Input:', !!chatInput);
+    } catch (error) {
+        console.error('❌ Chatbot initialization error:', error);
+    }
 }
 
 // ============================================
@@ -95,42 +122,152 @@ function initializeChatbot() {
 // ============================================
 
 function updateDataContext(allData) {
-    pssDataContext = allData;
-    console.log('📊 Chatbot context updated with', allData.length, 'records');
+    if (!Array.isArray(allData)) {
+        pssDataContext = [];
+        pssDataLastUpdated = null;
+        console.warn('⚠️ Chatbot context update received invalid data');
+        return;
+    }
+    // Always keep a fresh, timestamp-sorted copy (latest first)
+    pssDataContext = [...allData].sort((a, b) => {
+        const timeA = a?.timestamp?.toDate?.() || new Date(a?.timestamp || 0);
+        const timeB = b?.timestamp?.toDate?.() || new Date(b?.timestamp || 0);
+        return timeB - timeA;
+    });
+    pssDataLastUpdated = new Date();
+    // Build cached PSS index for fast lookups
+    const pssIndex = {};
+    pssDataContext.forEach(record => {
+        const name = record.pssStation || 'Unknown';
+        if (!pssIndex[name]) {
+            pssIndex[name] = { count: 0, dates: new Set(), latestDate: null };
+        }
+        pssIndex[name].count += 1;
+        if (record.date) {
+            pssIndex[name].dates.add(record.date);
+            if (!pssIndex[name].latestDate || record.date > pssIndex[name].latestDate) {
+                pssIndex[name].latestDate = record.date;
+            }
+        }
+    });
+    pssIndexCache = pssIndex;
+    pssNamesSortedCache = Object.keys(pssIndexCache).filter(Boolean).sort();
+    console.log('📊 Chatbot context updated with', pssDataContext.length, 'records');
 }
 
-function prepareDataSummary() {
+function prepareDataSummary(userMessage = '') {
     if (!pssDataContext || pssDataContext.length === 0) {
-        return "❌ No data available in the system.";
+        return "❌ No data available in the system. Ask the admin to load data first.";
     }
     
     // Get today's date
     const today = new Date().toISOString().split('T')[0];
     
-    // PERFORMANCE: Only process last 10 records instead of 15 to reduce lag
-    const recentRecords = pssDataContext.slice(-10);
+    // Parse user message to find requested PSS stations and dates
+    const messageUpper = String(userMessage || '').toUpperCase();
+    const dateMatch = messageUpper.match(/(\d{4}-\d{2}-\d{2})/);
+    const requestedDate = dateMatch ? dateMatch[1] : null;
+    const pssIndex = pssIndexCache || {};
+    const pssNamesSorted = pssNamesSortedCache || [];
+    const requestedPSS = pssNamesSorted.filter(name => messageUpper.includes(String(name).toUpperCase()));
+    const wantsDates = /\b(date|dates|when|submitted|submit)\b/i.test(userMessage);
+    const wantsDetails = /\b(detail|data|voltage|load|feeder|staff|record|show|get|what|tell|give)\b/i.test(userMessage);
+    
+    // SMART RECORD SELECTION: If user asks about specific PSS, include ALL records for that PSS
+    let recordsToShow = [];
+    let selectionMode = 'latest';
+    
+    if (requestedPSS.length > 0) {
+        // Get ALL records for the requested PSS stations
+        const pssRecords = pssDataContext.filter(record => {
+            const pssName = (record.pssStation || '').toUpperCase();
+            return requestedPSS.some(rp => rp.toUpperCase() === pssName);
+        });
+        
+        // If specific date requested, filter further
+        if (requestedDate) {
+            const dateFiltered = pssRecords.filter(r => r.date === requestedDate);
+            recordsToShow = dateFiltered.length > 0 ? dateFiltered : pssRecords.slice(0, 10);
+            selectionMode = dateFiltered.length > 0 ? 'pss+date' : 'pss-all';
+        } else {
+            recordsToShow = pssRecords.slice(0, 15); // Limit to 15 per PSS
+            selectionMode = 'pss-all';
+        }
+    } else if (requestedDate) {
+        // Date only - get all records for that date
+        recordsToShow = pssDataContext.filter(r => r.date === requestedDate).slice(0, 20);
+        selectionMode = 'date';
+    } else {
+        // Default: latest 20 records
+        recordsToShow = pssDataContext.slice(0, 20);
+        selectionMode = 'latest';
+    }
     
     // Build comprehensive data string
     let dataText = `
 ╔══════════════════════════════════════════════════════════════╗
-║                   PSS DATABASE - COMPLETE DATA                ║
+║                   PSS DATABASE - SMART QUERY                  ║
 ╚══════════════════════════════════════════════════════════════╝
 
 📊 TOTAL RECORDS IN DATABASE: ${pssDataContext.length}
-📅 LATEST ${recentRecords.length} DETAILED RECORDS:
-
+🎯 SELECTION MODE: ${selectionMode.toUpperCase()}
+📋 RECORDS INCLUDED: ${recordsToShow.length}
+🕒 CONTEXT LAST UPDATED: ${pssDataLastUpdated ? pssDataLastUpdated.toLocaleString() : 'Unknown'}
 `;
 
-    recentRecords.forEach((record, index) => {
+    // Add PSS-specific summary if PSS was requested
+    if (requestedPSS.length > 0) {
+        dataText += `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎯 REQUESTED PSS: ${requestedPSS.join(', ')}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+        requestedPSS.forEach(pssName => {
+            const stats = pssIndex[pssName];
+            if (stats) {
+                const allDates = Array.from(stats.dates || []).sort().reverse();
+                dataText += `
+📍 ${pssName}:
+   • Total Records: ${stats.count}
+   • Latest Date: ${stats.latestDate || 'N/A'}
+   • All Dates: ${allDates.join(', ')}`;
+            }
+        });
+        dataText += `\n`;
+    }
+
+    // Build PSS index from FULL dataset
+    const pssIndexText = pssNamesSorted.map(name => {
+        const stats = pssIndex[name];
+        return `• ${name} | Records: ${stats.count} | Latest: ${stats.latestDate || 'N/A'}`;
+    }).join('\n');
+
+    dataText += `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📍 ALL PSS STATIONS INDEX
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${pssIndexText || 'No PSS stations found'}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+    // Add FULL DETAILED RECORDS for the selected records
+    dataText += `
+╔══════════════════════════════════════════════════════════════╗
+║                    DETAILED RECORD DATA                       ║
+╚══════════════════════════════════════════════════════════════╝
+`;
+
+    recordsToShow.forEach((record, index) => {
         dataText += `
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RECORD #${index + 1}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📍 PSS STATION: ${record.pssStation || 'Unknown'}
 📅 DATE: ${record.date || 'N/A'}
-👤 STAFF: ${record.staffName || 'N/A'} | 📞 ${record.phone || 'N/A'}
+👤 STAFF: ${record.staffName || 'N/A'} | 📞 ${record.phoneNumber || record.phone || 'N/A'}
 ⏰ PEAK TIME: ${record.peakTime || 'N/A'}
 🔋 PEAK VOLTAGE: ${record.peakVoltage || 'N/A'} kV
+📈 TOTAL MAX LOAD: ${record.totalMaxLoad || 'N/A'} A
+📉 TOTAL MIN LOAD: ${record.totalMinLoad || 'N/A'} A
 
 `;
 
@@ -168,7 +305,7 @@ RECORD #${index + 1}
                 dataText += `  ▶️ PTR-2 33KV:\n`;
                 dataText += `     Max Voltage: ${record.ptr2_33kv.maxVoltage || 'N/A'} kV @ ${record.ptr2_33kv.maxVoltageTime || 'N/A'}\n`;
                 dataText += `     Min Voltage: ${record.ptr2_33kv.minVoltage || 'N/A'} kV @ ${record.ptr2_33kv.minVoltageTime || 'N/A'}\n`;
-                dataText += `     Max Load: ${record.ptr2_33kv.maxLoad || record.ptr2_33kv.maxCurrent || 'N/A'} A @ ${record.ptr2_33kv.maxLoadTime || record.ptr2_33kv.maxCurrentTime || 'N/A'}\n`;
+                dataText += `     Max Load: ${record.ptr2_33kv.maxLoad || record.ptr2_33kv.maxCurrent || 'N/A'} A @ ${record.ptr2_33kv.maxLoadTime || 'N/A'}\n`;
                 dataText += `     Min Load: ${record.ptr2_33kv.minLoad || record.ptr2_33kv.minCurrent || 'N/A'} A @ ${record.ptr2_33kv.minLoadTime || record.ptr2_33kv.minCurrentTime || 'N/A'}\n`;
             }
             dataText += `\n`;
@@ -188,7 +325,7 @@ RECORD #${index + 1}
                 dataText += `  ▶️ PTR-2 11KV:\n`;
                 dataText += `     Max Voltage: ${record.ptr2_11kv.maxVoltage || 'N/A'} kV @ ${record.ptr2_11kv.maxVoltageTime || 'N/A'}\n`;
                 dataText += `     Min Voltage: ${record.ptr2_11kv.minVoltage || 'N/A'} kV @ ${record.ptr2_11kv.minVoltageTime || 'N/A'}\n`;
-                dataText += `     Max Load: ${record.ptr2_11kv.maxLoad || record.ptr2_11kv.maxCurrent || 'N/A'} A @ ${record.ptr2_11kv.maxLoadTime || record.ptr2_11kv.maxCurrentTime || 'N/A'}\n`;
+                dataText += `     Max Load: ${record.ptr2_11kv.maxLoad || record.ptr2_11kv.maxCurrent || 'N/A'} A @ ${record.ptr2_11kv.maxLoadTime || 'N/A'}\n`;
                 dataText += `     Min Load: ${record.ptr2_11kv.minLoad || record.ptr2_11kv.minCurrent || 'N/A'} A @ ${record.ptr2_11kv.minLoadTime || record.ptr2_11kv.minCurrentTime || 'N/A'}\n`;
             }
             dataText += `\n`;
@@ -257,9 +394,11 @@ RECORD #${index + 1}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📊 QUICK STATISTICS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🏭 PSS Stations: ${uniquePSS.join(', ')}
+🏭 PSS Stations: ${uniquePSS.join(', ') || 'N/A'}
 📅 Today's Submissions: ${todayRecords.length} records
 📝 Total Database Records: ${pssDataContext.length}
+🧩 DATA SHAPE (per record): pssStation, date, staffName, phoneNumber, peakTime, peakVoltage,
+   ic1/ic2, ptr*_33kv/ptr*_11kv, feeders{}, stationTransformer{}, charger{}, totals
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 `;
 
@@ -358,9 +497,12 @@ async function sendMessage() {
     setTimeout(() => updateTypingStatus('📊 Accessing PSS database...'), 500);
     setTimeout(() => updateTypingStatus('🤔 Processing data patterns...'), 1000);
     setTimeout(() => updateTypingStatus('💭 Formulating response...'), 1500);
+
+    // Yield to UI before heavy processing
+    await new Promise(requestAnimationFrame);
     
     // Prepare data context
-    const dataSummary = prepareDataSummary();
+    const dataSummary = prepareDataSummary(message);
     
     // Call API
     try {
@@ -386,16 +528,25 @@ function addUserMessage(text) {
     `;
     
     const messagesContainer = document.getElementById('chatMessages');
-    messagesContainer.appendChild(messageDiv);
+    const typingIndicator = document.getElementById('typingIndicator');
+    
+    // Insert message BEFORE the typing indicator (keeps typing at bottom)
+    if (typingIndicator && messagesContainer.contains(typingIndicator)) {
+        messagesContainer.insertBefore(messageDiv, typingIndicator);
+    } else {
+        messagesContainer.appendChild(messageDiv);
+    }
     
     // Smooth scroll to bottom with delay to ensure DOM is updated
     requestAnimationFrame(() => {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     });
     
-    // Save to history
-    chatHistory.push({ role: 'user', content: text });
-    sessionStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+    // Save to history (skip if called from renderChatHistory)
+    if (!window._renderingHistory) {
+        chatHistory.push({ role: 'user', content: text });
+        safeSaveHistory();
+    }
 }
 
 function addBotMessage(text) {
@@ -422,16 +573,46 @@ function addBotMessage(text) {
     `;
     
     const messagesContainer = document.getElementById('chatMessages');
-    messagesContainer.appendChild(messageDiv);
+    const typingIndicator = document.getElementById('typingIndicator');
+    
+    // Insert message BEFORE the typing indicator (keeps typing at bottom)
+    if (typingIndicator && messagesContainer.contains(typingIndicator)) {
+        messagesContainer.insertBefore(messageDiv, typingIndicator);
+    } else {
+        messagesContainer.appendChild(messageDiv);
+    }
     
     // Smooth scroll to bottom with delay to ensure DOM is updated
     requestAnimationFrame(() => {
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
     });
     
-    // Save to history
-    chatHistory.push({ role: 'assistant', content: text });
-    sessionStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+    // Save to history (skip if called from renderChatHistory)
+    if (!window._renderingHistory) {
+        chatHistory.push({ role: 'assistant', content: text });
+        safeSaveHistory();
+    }
+}
+
+// Safe save to sessionStorage with quota handling
+function safeSaveHistory() {
+    try {
+        // Limit to last 20 messages to avoid quota issues
+        if (chatHistory.length > 20) {
+            chatHistory = chatHistory.slice(-20);
+        }
+        sessionStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+    } catch (e) {
+        console.warn('⚠️ Session storage quota exceeded, clearing old history');
+        // Clear and try again with just last 10 messages
+        chatHistory = chatHistory.slice(-10);
+        try {
+            sessionStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+        } catch (e2) {
+            // If still fails, just clear it
+            sessionStorage.removeItem('chatHistory');
+        }
+    }
 }
 
 function showTypingIndicator(status = '🔍 Analyzing your data...') {
@@ -477,6 +658,11 @@ function clearChat() {
 
 function renderChatHistory() {
     const messagesContainer = document.getElementById('chatMessages');
+    if (!messagesContainer) return;
+    
+    // Set flag to prevent saving during render
+    window._renderingHistory = true;
+    
     chatHistory.forEach(msg => {
         if (msg.role === 'user') {
             addUserMessage(msg.content);
@@ -484,6 +670,8 @@ function renderChatHistory() {
             addBotMessage(msg.content);
         }
     });
+    
+    window._renderingHistory = false;
 }
 
 // ============================================
@@ -742,7 +930,7 @@ async function testChatbot() {
         updateTypingStatus('📊 Preparing data summary...');
         const dataSummary = prepareDataSummary();
         
-        updateTypingStatus('🤖 Sending test query...');
+        updateTypingStatus('� Sending test query...');
         const testQuery = "Give me a brief summary of the PSS data in 2-3 sentences.";
         
         updateTypingStatus('⚡ Waiting for AI response...');

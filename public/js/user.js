@@ -1,4 +1,4 @@
-// ============================================
+﻿// ============================================
 // USER DASHBOARD - COMPLETE LOGIC
 // My Dashboard | History | New Entry
 // ============================================
@@ -8,7 +8,14 @@ const userState = {
     mySubmissions: [],
     currentFilter: 'all',
     statistics: {},
-    formModal: null
+    formModal: null,
+    // New filter state
+    submissionFilters: {
+        staff: 'all',
+        fromDate: '',
+        toDate: ''
+    },
+    uniqueStaffList: []
 };
 
 // Global wizard and clock picker state
@@ -139,7 +146,7 @@ function calculateUserStatistics() {
         if (latestToday.ic1) {
             allPeakLoads.push({
                 name: 'I/C-1',
-                icon: '⚡',
+                icon: '\u26A1',
                 load: parseFloat(latestToday.ic1.maxLoad) || 0,
                 time: latestToday.ic1.maxLoadTime || '--:--',
                 voltage: parseFloat(latestToday.ic1.maxVoltage) || 0,
@@ -147,7 +154,7 @@ function calculateUserStatistics() {
             });
             allMinLoads.push({
                 name: 'I/C-1',
-                icon: '⚡',
+                icon: '\u26A1',
                 load: parseFloat(latestToday.ic1.minLoad) || 0,
                 time: latestToday.ic1.minLoadTime || '--:--',
                 voltage: parseFloat(latestToday.ic1.minVoltage) || 0,
@@ -158,7 +165,7 @@ function calculateUserStatistics() {
         if (latestToday.ic2) {
             allPeakLoads.push({
                 name: 'I/C-2',
-                icon: '⚡',
+                icon: '\u26A1',
                 load: parseFloat(latestToday.ic2.maxLoad) || 0,
                 time: latestToday.ic2.maxLoadTime || '--:--',
                 voltage: parseFloat(latestToday.ic2.maxVoltage) || 0,
@@ -166,7 +173,7 @@ function calculateUserStatistics() {
             });
             allMinLoads.push({
                 name: 'I/C-2',
-                icon: '⚡',
+                icon: '\u26A1',
                 load: parseFloat(latestToday.ic2.minLoad) || 0,
                 time: latestToday.ic2.minLoadTime || '--:--',
                 voltage: parseFloat(latestToday.ic2.minVoltage) || 0,
@@ -174,13 +181,34 @@ function calculateUserStatistics() {
             });
         }
         
-        // PTR Data
-        const ptrData = [
-            { key: 'ptr1_33kv', name: 'PTR-1 (33kV)', icon: '🔄' },
-            { key: 'ptr2_33kv', name: 'PTR-2 (33kV)', icon: '🔄' },
-            { key: 'ptr1_11kv', name: 'PTR-1 (11kV)', icon: '🔄' },
-            { key: 'ptr2_11kv', name: 'PTR-2 (11kV)', icon: '🔄' }
-        ];
+        // PTR Data - Dynamic based on PSS configuration
+        // Get PTR count from PSS config (default to 2 if not found)
+        let ptrCount = 2;
+        const pssStation = appState.currentUser.pssStation;
+        let pssData = appState.pssConfig[pssStation];
+        
+        // Try case-insensitive match if not found
+        if (!pssData) {
+            const pssKey = Object.keys(appState.pssConfig).find(key => 
+                key.toLowerCase() === pssStation.toLowerCase()
+            );
+            if (pssKey) {
+                pssData = appState.pssConfig[pssKey];
+            }
+        }
+        
+        if (pssData && pssData.ptrCount) {
+            ptrCount = pssData.ptrCount;
+        }
+        
+        // Generate PTR data array dynamically based on ptrCount
+        const ptrData = [];
+        for (let i = 1; i <= ptrCount; i++) {
+            ptrData.push({ key: `ptr${i}_33kv`, name: `PTR-${i} (33kV)`, icon: '\uD83D\uDD04' });
+        }
+        for (let i = 1; i <= ptrCount; i++) {
+            ptrData.push({ key: `ptr${i}_11kv`, name: `PTR-${i} (11kV)`, icon: '\uD83D\uDD04' });
+        }
         
         ptrData.forEach(ptr => {
             if (latestToday[ptr.key]) {
@@ -205,10 +233,13 @@ function calculateUserStatistics() {
         
         // Feeder Data
         if (latestToday.feeders) {
-            Object.entries(latestToday.feeders).forEach(([feederName, feederData]) => {
+            Object.entries(latestToday.feeders).forEach(([feederKey, feederData]) => {
+                // Extract actual feeder name from data
+                const displayName = feederData.name || feederData.feederName || feederKey;
+                
                 allPeakLoads.push({
-                    name: feederName,
-                    icon: '🔌',
+                    name: displayName,
+                    icon: '\uD83D\uDD0C',
                     load: parseFloat(feederData.maxLoad) || 0,
                     time: feederData.maxLoadTime || '--:--',
                     voltage: parseFloat(feederData.maxVoltage) || 0,
@@ -216,8 +247,8 @@ function calculateUserStatistics() {
                     ptrNo: feederData.ptrNo || 'N/A'
                 });
                 allMinLoads.push({
-                    name: feederName,
-                    icon: '🔌',
+                    name: displayName,
+                    icon: '\uD83D\uDD0C',
                     load: parseFloat(feederData.minLoad) || 0,
                     time: feederData.minLoadTime || '--:--',
                     voltage: parseFloat(feederData.minVoltage) || 0,
@@ -414,9 +445,48 @@ function renderSubmissionHistory() {
         return;
     }
     
-    // Get recent submissions (last 10)
-    const recentSubmissions = userState.mySubmissions.slice(0, 10);
-    console.log('  Showing recent:', recentSubmissions.length);
+    // Populate staff filter dropdown
+    populateStaffFilter();
+    
+    // Apply filters to submissions
+    let filteredSubmissions = [...userState.mySubmissions];
+    
+    // Filter by staff
+    if (userState.submissionFilters.staff !== 'all') {
+        filteredSubmissions = filteredSubmissions.filter(sub => 
+            sub.staffName === userState.submissionFilters.staff
+        );
+    }
+    
+    // Filter by from date
+    if (userState.submissionFilters.fromDate) {
+        filteredSubmissions = filteredSubmissions.filter(sub => 
+            sub.date >= userState.submissionFilters.fromDate
+        );
+    }
+    
+    // Filter by to date
+    if (userState.submissionFilters.toDate) {
+        filteredSubmissions = filteredSubmissions.filter(sub => 
+            sub.date <= userState.submissionFilters.toDate
+        );
+    }
+    
+    // Update submission count badge
+    const countBadge = document.getElementById('submissionCount');
+    if (countBadge) {
+        const totalCount = userState.mySubmissions.length;
+        const filteredCount = filteredSubmissions.length;
+        if (totalCount !== filteredCount) {
+            countBadge.textContent = `${filteredCount} / ${totalCount}`;
+        } else {
+            countBadge.textContent = totalCount;
+        }
+    }
+    
+    // Get recent submissions (last 10 after filtering)
+    const recentSubmissions = filteredSubmissions.slice(0, 10);
+    console.log('  Showing filtered:', recentSubmissions.length, 'of', filteredSubmissions.length);
     
     if (recentSubmissions.length === 0) {
         listContainer.innerHTML = `
@@ -577,6 +647,12 @@ async function viewSubmissionDetails(submissionId) {
         return;
     }
     
+    console.log('📊 Viewing submission details:', submissionId);
+    console.log('  Full submission data:', submission);
+    console.log('  Feeders data:', submission.feeders);
+    console.log('  Feeders type:', typeof submission.feeders);
+    console.log('  Feeders keys:', submission.feeders ? Object.keys(submission.feeders) : 'N/A');
+    
     // Build comprehensive details HTML
     let html = `
         <div style="max-height: 70vh; overflow-y: auto; padding: 1rem;">
@@ -601,7 +677,7 @@ async function viewSubmissionDetails(submissionId) {
             
             <!-- I/C Sections -->
             <div style="margin-bottom: 1.5rem;">
-                <h3 style="color: #60a5fa; margin-bottom: 1rem; font-size: 18px;">⚡ INCOMING (I/C) DATA</h3>
+                <h3 style="color: #60a5fa; margin-bottom: 1rem; font-size: 18px;">${String.fromCodePoint(0x26A1)} INCOMING (I/C) DATA</h3>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem;">
                     ${renderEquipmentCard('I/C-1', submission.ic1)}
                     ${renderEquipmentCard('I/C-2', submission.ic2)}
@@ -610,18 +686,15 @@ async function viewSubmissionDetails(submissionId) {
             
             <!-- PTR Sections -->
             <div style="margin-bottom: 1.5rem;">
-                <h3 style="color: #a78bfa; margin-bottom: 1rem; font-size: 18px;">🔄 PTR (POWER TRANSFORMER) DATA</h3>
+                <h3 style="color: #a78bfa; margin-bottom: 1rem; font-size: 18px;">${String.fromCodePoint(0x1F504)} PTR (POWER TRANSFORMER) DATA</h3>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem;">
-                    ${renderEquipmentCard('PTR-1 (33kV)', submission.ptr1_33kv)}
-                    ${renderEquipmentCard('PTR-2 (33kV)', submission.ptr2_33kv)}
-                    ${renderEquipmentCard('PTR-1 (11kV)', submission.ptr1_11kv)}
-                    ${renderEquipmentCard('PTR-2 (11kV)', submission.ptr2_11kv)}
+                    ${renderAllPTRCards(submission)}
                 </div>
             </div>
             
             <!-- Feeders Section -->
             <div style="margin-bottom: 1.5rem;">
-                <h3 style="color: #10b981; margin-bottom: 1rem; font-size: 18px;">🔌 FEEDER DATA</h3>
+                <h3 style="color: #10b981; margin-bottom: 1rem; font-size: 18px;">${String.fromCodePoint(0x1F50C)} FEEDER DATA</h3>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem;">
                     ${renderFeederCards(submission.feeders)}
                 </div>
@@ -629,7 +702,7 @@ async function viewSubmissionDetails(submissionId) {
             
             <!-- Equipment Section -->
             <div style="margin-bottom: 1.5rem;">
-                <h3 style="color: #f59e0b; margin-bottom: 1rem; font-size: 18px;">🔋 EQUIPMENT DATA</h3>
+                <h3 style="color: #f59e0b; margin-bottom: 1rem; font-size: 18px;">${String.fromCodePoint(0x1F50B)} EQUIPMENT DATA</h3>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem;">
                     ${renderEquipmentCard('Station Transformer', submission.stationTransformer)}
                     ${renderEquipmentCard('Charger (48/24V)', submission.charger)}
@@ -638,7 +711,7 @@ async function viewSubmissionDetails(submissionId) {
             
             <!-- Summary -->
             <div style="background: rgba(16,185,129,0.1); border: 2px solid rgba(16,185,129,0.3); border-radius: 12px; padding: 1.5rem;">
-                <h3 style="color: #10b981; margin: 0 0 1rem 0; font-size: 18px;">📈 SUMMARY</h3>
+                <h3 style="color: #10b981; margin: 0 0 1rem 0; font-size: 18px;">${String.fromCodePoint(0x1F4C8)} SUMMARY</h3>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; color: rgba(255,255,255,0.9);">
                     <div>
                         <strong>Total Feeders:</strong> ${submission.feederCount || Object.keys(submission.feeders || {}).length}
@@ -686,16 +759,105 @@ function renderEquipmentCard(title, data) {
     `;
 }
 
+function renderAllPTRCards(submission) {
+    // Dynamically find all PTR fields in the submission
+    const ptrCards = [];
+    
+    // Check for ptr1_33kv through ptr5_33kv
+    for (let i = 1; i <= 5; i++) {
+        const ptrKey33 = `ptr${i}_33kv`;
+        if (submission[ptrKey33]) {
+            ptrCards.push(renderEquipmentCard(`PTR-${i} (33kV)`, submission[ptrKey33]));
+        }
+    }
+    
+    // Check for ptr1_11kv through ptr5_11kv
+    for (let i = 1; i <= 5; i++) {
+        const ptrKey11 = `ptr${i}_11kv`;
+        if (submission[ptrKey11]) {
+            ptrCards.push(renderEquipmentCard(`PTR-${i} (11kV)`, submission[ptrKey11]));
+        }
+    }
+    
+    return ptrCards.length > 0 ? ptrCards.join('') : '<p style="color: rgba(255,255,255,0.5);">No PTR data available</p>';
+}
+
 function renderFeederCards(feeders) {
-    if (!feeders || Object.keys(feeders).length === 0) {
-        return '<p style="color: rgba(255,255,255,0.5);">No feeder data available</p>';
+    console.log('🔍 renderFeederCards called with:', feeders);
+    console.log('  Type:', typeof feeders);
+    console.log('  Is null?:', feeders === null);
+    console.log('  Is undefined?:', feeders === undefined);
+    
+    // Handle missing or invalid feeders
+    if (!feeders) {
+        console.warn('⚠️ No feeders object provided');
+        return '<p style="color: rgba(255,255,255,0.5);">No feeder data available (feeders is null/undefined)</p>';
+    }
+    
+    if (typeof feeders !== 'object') {
+        console.error('❌ Feeders is not an object:', typeof feeders);
+        return '<p style="color: rgba(255,255,255,0.5);">Invalid feeder data format</p>';
+    }
+    
+    const feederKeys = Object.keys(feeders);
+    console.log('  Feeder keys:', feederKeys);
+    
+    if (feederKeys.length === 0) {
+        console.warn('⚠️ Feeders object is empty');
+        return '<p style="color: rgba(255,255,255,0.5);">No feeder data available (empty object)</p>';
     }
     
     let html = '';
-    Object.entries(feeders).forEach(([feederName, data]) => {
+    Object.entries(feeders).forEach(([feederKey, data], i) => {
+        console.log(`  Processing feeder ${i}:`, feederKey);
+        console.log(`    Data:`, data);
+        console.log(`    Data.name type:`, typeof data.name);
+        console.log(`    Data.name value:`, data.name);
+        
+        // Skip if data is invalid
+        if (!data || typeof data !== 'object') {
+            console.warn(`  ⚠️ Skipping invalid feeder data for ${feederKey}`);
+            return;
+        }
+        
+        // Extract the actual feeder name - try multiple strategies
+        let feederName = feederKey; // Default to the key itself
+        
+        // Strategy 1: Check if data.name is a simple string
+        if (data.name && typeof data.name === 'string') {
+            feederName = data.name;
+            console.log(`    ✅ Using data.name (string):`, feederName);
+        }
+        // Strategy 2: Check if data.name is an object with a name property
+        else if (data.name && typeof data.name === 'object' && data.name !== null) {
+            if (data.name.name && typeof data.name.name === 'string') {
+                feederName = data.name.name;
+                console.log(`    ✅ Using data.name.name:`, feederName);
+            } else {
+                // Try to stringify the object to see what's in it
+                console.warn(`    ⚠️ data.name is object but no string name found:`, JSON.stringify(data.name));
+                feederName = feederKey; // Fall back to key
+            }
+        }
+        // Strategy 3: Try feederName property
+        else if (data.feederName && typeof data.feederName === 'string') {
+            feederName = data.feederName;
+            console.log(`    ✅ Using data.feederName:`, feederName);
+        }
+        // Strategy 4: If the feederKey looks like a proper name, use it
+        else if (feederKey && feederKey !== 'undefined' && !feederKey.includes('object')) {
+            feederName = feederKey;
+            console.log(`    ✅ Using feederKey as name:`, feederName);
+        }
+        // Strategy 5: Generate a default name
+        else {
+            feederName = `Feeder-${i + 1}`;
+            console.log(`    ⚠️ Using default generated name:`, feederName);
+        }
+        
         html += `
             <div style="background: rgba(59,130,246,0.1); border: 2px solid rgba(59,130,246,0.3); border-radius: 8px; padding: 1rem;">
-                <h4 style="color: #60a5fa; margin: 0 0 0.75rem 0; font-size: 14px; font-weight: 700;">⚡ ${feederName} (PTR ${data.ptrNo || 'N/A'})</h4>
+                <h4 style="color: #60a5fa; margin: 0 0 0.75rem 0; font-size: 14px; font-weight: 700;">${String.fromCodePoint(0x26A1)} ${feederName} (PTR ${data.ptrNo || 'N/A'})</h4>
                 <div style="display: grid; gap: 0.5rem; font-size: 13px;">
                     <div style="display: flex; justify-content: space-between; padding: 0.5rem; background: rgba(239,68,68,0.1); border-radius: 6px;">
                         <span style="color: rgba(255,255,255,0.7);">🔴 Max Voltage:</span>
@@ -718,7 +880,8 @@ function renderFeederCards(feeders) {
         `;
     });
     
-    return html;
+    console.log('✅ Generated HTML for', Object.keys(feeders).length, 'feeders');
+    return html || '<p style="color: rgba(255,255,255,0.5);">No valid feeder data to display</p>';
 }
 
 function showDetailsModal(content) {
@@ -1430,13 +1593,39 @@ function generateICSection() {
 
 function generatePTRSection() {
     const container = document.getElementById('ptrContainer');
-    container.innerHTML = `
-        ${createEquipmentSection('PTR-1 33kv side', 'ptr1_33kv', '⚙️')}
-        ${createEquipmentSection('PTR-2 33kv side', 'ptr2_33kv', '⚙️')}
-        ${createEquipmentSection('PTR-1 11kv side', 'ptr1_11kv', '⚙️')}
-        ${createEquipmentSection('PTR-2 11kv side', 'ptr2_11kv', '⚙️')}
-    `;
-    console.log('✅ Generated PTR sections');
+    const pssStation = appState.currentUser.pssStation;
+    
+    console.log('🔍 Generating PTR section...');
+    console.log('  PSS Station:', pssStation);
+    
+    // Get PSS data with case-insensitive matching
+    let pssData = appState.pssConfig[pssStation];
+    
+    if (!pssData) {
+        const pssKey = Object.keys(appState.pssConfig).find(key => 
+            key.toLowerCase() === pssStation.toLowerCase()
+        );
+        if (pssKey) {
+            pssData = appState.pssConfig[pssKey];
+            console.log('  ✅ Found PSS data with key:', pssKey);
+        }
+    }
+    
+    // Get PTR count from PSS configuration (default to 2)
+    const ptrCount = pssData?.ptrCount || 2;
+    console.log('  ✅ PTR Count:', ptrCount);
+    
+    // Generate PTR sections dynamically based on ptrCount
+    let ptrHTML = '';
+    for (let i = 1; i <= ptrCount; i++) {
+        ptrHTML += createEquipmentSection(`PTR-${i} 33kv side`, `ptr${i}_33kv`, '⚙️');
+    }
+    for (let i = 1; i <= ptrCount; i++) {
+        ptrHTML += createEquipmentSection(`PTR-${i} 11kv side`, `ptr${i}_11kv`, '⚙️');
+    }
+    
+    container.innerHTML = ptrHTML;
+    console.log(`✅ Generated ${ptrCount} PTR sections (33kV and 11kV)`);
     
     // Initialize clock pickers for all time inputs
     setTimeout(() => initializeTimePickersInModal(), 100);
@@ -1479,30 +1668,45 @@ function generateFeederSection() {
         }
         console.log('  ✅ Using', pssData.feeders, 'feeders (number format)');
     } else if (Array.isArray(pssData.feeders)) {
-        feedersArray = pssData.feeders;
-        console.log('  ✅ Using', feedersArray.length, 'feeders (array format)');
+        // Handle both string arrays and object arrays
+        feedersArray = pssData.feeders.map(feeder => {
+            if (typeof feeder === 'string') {
+                return feeder;
+            } else if (typeof feeder === 'object' && feeder !== null) {
+                // If it's an object, try to extract the name property
+                return feeder.name || feeder.feederName || `Feeder-${feedersArray.length + 1}`;
+            } else {
+                return String(feeder);
+            }
+        });
+        console.log('  ✅ Using', feedersArray.length, 'feeders (array format):', feedersArray);
     } else {
         console.error('  ❌ Unexpected feeders format:', typeof pssData.feeders);
         feedersArray = ['Feeder-1', 'Feeder-2', 'Feeder-3'];
     }
     
-    let html = `<p style="color: rgba(255,255,255,0.7); margin-bottom: 20px;">Configure ${feedersArray.length} feeders for ${pssStation}</p>`;
+    // Get PTR count for dropdown options
+    const ptrCount = pssData?.ptrCount || 2;
+    let ptrOptions = '<option value="">Select PTR</option>';
+    for (let i = 1; i <= ptrCount; i++) {
+        ptrOptions += `<option value="${i}">PTR ${i}</option>`;
+    }
+    
+    let html = `<p style="color: rgba(255,255,255,0.7); margin-bottom: 20px;">Configure ${feedersArray.length} feeders for ${pssStation} (${ptrCount} PTRs available)</p>`;
     
     feedersArray.forEach((feeder, index) => {
+        // Ensure feeder is a string for display
+        const feederName = typeof feeder === 'string' ? feeder : (feeder?.name || `Feeder-${index + 1}`);
+        
         html += `
         <div class="equipment-section" style="background: rgba(59,130,246,0.1); border-radius: 16px; padding: 24px; margin-bottom: 20px; border: 2px solid rgba(59,130,246,0.3);">
             <h4 style="color: #60a5fa; font-size: 18px; margin-bottom: 20px; font-weight: 700;">
-                ⚡ ${feeder}
+                ⚡ ${feederName}
             </h4>
             <div style="margin-bottom: 16px;">
                 <label style="color: #a78bfa; font-weight: 600; font-size: 12px;">🔢 PTR NO (SELECT)</label>
                 <select id="feeder_${index}_ptr" class="form-control" style="border-left: 4px solid #a78bfa;">
-                    <option value="">Select PTR</option>
-                    <option value="1">PTR 1</option>
-                    <option value="2">PTR 2</option>
-                    <option value="3">PTR 3</option>
-                    <option value="4">PTR 4</option>
-                    <option value="5">PTR 5</option>
+                    ${ptrOptions}
                 </select>
             </div>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
@@ -1558,11 +1762,11 @@ function generateEquipmentSection() {
         </div>
         
         <div>
-            <h4 style="color: #a855f7; font-size: 18px; margin-bottom: 16px;">🔌 CHARGER 48/24V (O/P DC VOLT)</h4>
-            <div class="equipment-section" style="background: rgba(168,85,247,0.1); border-radius: 16px; padding: 24px; border: 2px solid rgba(168,85,247,0.3);">
+            <h4 style="color: #a855f7; font-size: 18px; margin-bottom: 20px; font-weight: 700;">🔋 CHARGER 48/24V (O/P DC VOLT)</h4>
+            <div class="equipment-section" style="background: rgba(168,85,247,0.1); border-radius: 16px; padding: 24px; margin-bottom: 20px; border: 2px solid rgba(168,85,247,0.3);">
                 <div style="margin-bottom: 16px;">
                     <label style="color: #a78bfa; font-weight: 600; font-size: 12px;">🔢 PTR NO (SELECT)</label>
-                    <select id="charger_ptr" class="form-control" style="border-left: 4px solid #a78bfa;">
+                    <select id="charger_ptr" class="form-control" style="border-left: 4px solid #a78bfa; background: rgba(168,85,247,0.15); color: #e9d5ff; border: 1px solid rgba(168,85,247,0.5); border-radius: 8px; padding: 10px 12px; font-size: 14px;">
                         <option value="">Select PTR</option>
                         <option value="1">PTR 1</option>
                         <option value="2">PTR 2</option>
@@ -1715,6 +1919,7 @@ async function submitLoadingData() {
         }
         
         // Get feeders array (handle ALL types: number, array, or undefined)
+        // IMPORTANT: Always convert to string array to avoid [object Object] keys
         let feedersArray = [];
         if (!pssData || !pssData.feeders) {
             // Default to 3 feeders if not specified
@@ -1725,7 +1930,18 @@ async function submitLoadingData() {
                 feedersArray.push(`Feeder-${i}`);
             }
         } else if (Array.isArray(pssData.feeders)) {
-            feedersArray = pssData.feeders;
+            // Handle both string arrays and object arrays - ALWAYS convert to strings
+            feedersArray = pssData.feeders.map((feeder, index) => {
+                if (typeof feeder === 'string') {
+                    return feeder;
+                } else if (typeof feeder === 'object' && feeder !== null) {
+                    // Extract name from object
+                    return feeder.name || feeder.feederName || `Feeder-${index + 1}`;
+                } else {
+                    return String(feeder) || `Feeder-${index + 1}`;
+                }
+            });
+            console.log('✅ Converted feeders to string array:', feedersArray);
         } else {
             // Fallback for unexpected data type
             console.warn('Unexpected feeders format:', typeof pssData.feeders);
@@ -1736,19 +1952,40 @@ async function submitLoadingData() {
         const ic1Data = collectEquipmentData('ic1');
         const ic2Data = collectEquipmentData('ic2');
         
-        // 2. COLLECT PTR DATA
-        const ptr1_33kvData = collectEquipmentData('ptr1_33kv');
-        const ptr2_33kvData = collectEquipmentData('ptr2_33kv');
-        const ptr1_11kvData = collectEquipmentData('ptr1_11kv');
-        const ptr2_11kvData = collectEquipmentData('ptr2_11kv');
+        // 2. COLLECT PTR DATA (DYNAMIC based on ptrCount)
+        const ptrCount = pssData?.ptrCount || 2;
+        console.log(`Collecting data for ${ptrCount} PTRs`);
+        
+        const ptrData = {};
+        for (let i = 1; i <= ptrCount; i++) {
+            ptrData[`ptr${i}_33kv`] = collectEquipmentData(`ptr${i}_33kv`);
+            ptrData[`ptr${i}_11kv`] = collectEquipmentData(`ptr${i}_11kv`);
+        }
         
         // 3. COLLECT FEEDER DATA (Dynamic based on PSS)
         const feedersData = {};
         let totalMaxLoad = 0;
         let totalMinLoad = 0;
         
+        console.log('📦 Collecting feeder data...');
+        console.log('  feedersArray:', feedersArray);
+        
         for (let index = 0; index < feedersArray.length; index++) {
             const feeder = feedersArray[index];
+            console.log(`  Processing feeder ${index}:`, feeder, 'Type:', typeof feeder);
+            
+            // Extract feeder name properly (handle both string and object)
+            let feederName;
+            if (typeof feeder === 'string') {
+                feederName = feeder;
+            } else if (typeof feeder === 'object' && feeder !== null) {
+                feederName = feeder.name || feeder.feederName || `Feeder-${index + 1}`;
+            } else {
+                feederName = String(feeder) || `Feeder-${index + 1}`;
+            }
+            
+            console.log(`    Extracted feederName:`, feederName);
+            
             const ptrNo = document.getElementById(`feeder_${index}_ptr`)?.value || '';
             const maxVoltage = parseFloat(document.getElementById(`feeder_${index}_max_voltage`)?.value || 0);
             const maxVoltageTime = document.getElementById(`feeder_${index}_max_voltage_time`)?.value || '';
@@ -1759,7 +1996,9 @@ async function submitLoadingData() {
             const minLoad = parseFloat(document.getElementById(`feeder_${index}_min_load`)?.value || 0);
             const minLoadTime = document.getElementById(`feeder_${index}_min_load_time`)?.value || '';
             
-            feedersData[feeder] = {
+            // Use the extracted string name as the key
+            feedersData[feederName] = {
+                name: feederName,  // Store feeder name explicitly for display
                 ptrNo: ptrNo,
                 maxVoltage: maxVoltage,
                 maxVoltageTime: maxVoltageTime,
@@ -1771,9 +2010,13 @@ async function submitLoadingData() {
                 minLoadTime: minLoadTime
             };
             
+            console.log(`    Saved feeder data:`, feederName, feedersData[feederName]);
+            
             totalMaxLoad += maxLoad;
             totalMinLoad += minLoad;
         }
+        
+        console.log('✅ Final feedersData:', feedersData);
         
         // 4. COLLECT STATION TRANSFORMER DATA
         const stationTransformerData = collectEquipmentData('station_transformer');
@@ -1800,11 +2043,8 @@ async function submitLoadingData() {
             ic1: ic1Data,
             ic2: ic2Data,
             
-            // PTR Data (4 sections)
-            ptr1_33kv: ptr1_33kvData,
-            ptr2_33kv: ptr2_33kvData,
-            ptr1_11kv: ptr1_11kvData,
-            ptr2_11kv: ptr2_11kvData,
+            // PTR Data (Dynamic - spread all collected PTR data)
+            ...ptrData,
             
             // Feeder Data (Dynamic based on PSS)
             feeders: feedersData,
@@ -1827,7 +2067,7 @@ async function submitLoadingData() {
         const docRef = await db.collection('daily_entries').add(submissionData);
         console.log('✅ Document saved with ID:', docRef.id);
         
-        alert(`✅ Complete Loading Data Submitted Successfully!\n\n📊 Summary:\n• I/C Sections: 2\n• PTR Sections: 4\n• Feeders: ${feedersArray.length}\n• Total Max Load: ${totalMaxLoad.toFixed(2)} AMP\n• Total Min Load: ${totalMinLoad.toFixed(2)} AMP\n• Station Transformer: ✓\n• Charger: ✓`);
+        alert(`✅ Complete Loading Data Submitted Successfully!\n\n📊 Summary:\n• I/C Sections: 2\n• PTR Sections: ${ptrCount}\n• Feeders: ${feedersArray.length}\n• Total Max Load: ${totalMaxLoad.toFixed(2)} AMP\n• Total Min Load: ${totalMinLoad.toFixed(2)} AMP\n• Station Transformer: ✓\n• Charger: ✓`);
         
         closeNewEntryForm();
         
@@ -1849,31 +2089,31 @@ async function submitLoadingData() {
 async function updatePSSStats() {
     try {
         const pssStation = appState.currentUser.pssStation;
-        const fromDate = document.getElementById('statsFromDate')?.value;
-        const toDate = document.getElementById('statsToDate')?.value;
         const today = new Date().toISOString().split('T')[0];
         
-        console.log('Updating PSS stats for:', pssStation, 'From:', fromDate, 'To:', toDate);
+        console.log('📊 Updating PSS stats for:', pssStation);
+        
+        // Get PSS configuration for PTR count
+        let pssData = appState.pssConfig[pssStation];
+        if (!pssData) {
+            const pssKey = Object.keys(appState.pssConfig).find(key => 
+                key.toLowerCase() === pssStation.toLowerCase()
+            );
+            if (pssKey) pssData = appState.pssConfig[pssKey];
+        }
+        const ptrCount = pssData?.ptrCount || 2;
         
         // Query all submissions for this PSS
-        let query = db.collection('daily_entries').where('pssStation', '==', pssStation);
+        const snapshot = await db.collection('daily_entries')
+            .where('pssStation', '==', pssStation)
+            .get();
         
-        // Apply date filters if provided
-        if (fromDate) {
-            query = query.where('date', '>=', fromDate);
-        }
-        if (toDate) {
-            query = query.where('date', '<=', toDate);
-        }
-        
-        const snapshot = await query.get();
-        const submissions = [];
-        
+        let submissions = [];
         snapshot.forEach(doc => {
             submissions.push({ id: doc.id, ...doc.data() });
         });
         
-        console.log(`Found ${submissions.length} submissions for PSS stats`);
+        console.log(`✅ Found ${submissions.length} submissions for PSS stats`);
         
         // Calculate statistics
         let totalMaxLoad = 0;
@@ -1932,18 +2172,22 @@ async function updatePSSStats() {
         document.getElementById('pssFeeder1Peak').innerHTML = `
             <div style="font-size: 24px; font-weight: 700; color: #ef4444;">${todayFeeder1Peak.load.toFixed(2)} A</div>
             <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 0.25rem;">@ ${todayFeeder1Peak.time} | ${todayFeeder1Peak.voltage.toFixed(2)} kV</div>
+            <p style="margin-top: 0.5rem; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.9);">⚡ Peak Load (Today)</p>
         `;
         document.getElementById('pssFeeder1Min').innerHTML = `
             <div style="font-size: 24px; font-weight: 700; color: #3b82f6;">${todayFeeder1Min.load.toFixed(2)} A</div>
             <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 0.25rem;">@ ${todayFeeder1Min.time} | ${todayFeeder1Min.voltage.toFixed(2)} kV</div>
+            <p style="margin-top: 0.5rem; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.9);">⚡ Min Load (Today)</p>
         `;
         document.getElementById('pssActiveStaff').textContent = uniqueStaff.size;
         
         // Update leaderboard
         displayLeaderboard(staffCounts);
         
+        console.log('✅ PSS stats updated successfully');
+        
     } catch (error) {
-        console.error('Error updating PSS stats:', error);
+        console.error('❌ Error updating PSS stats:', error);
     }
 }
 
@@ -1986,10 +2230,70 @@ function displayLeaderboard(staffCounts) {
     container.innerHTML = html;
 }
 
-function clearStatsFilter() {
-    document.getElementById('statsFromDate').value = '';
-    document.getElementById('statsToDate').value = '';
-    updatePSSStats();
+// ============================================
+// SUBMISSION FILTER FUNCTIONS
+// ============================================
+
+function populateStaffFilter() {
+    const staffSelect = document.getElementById('staffFilter');
+    if (!staffSelect) return;
+    
+    // Collect unique staff names from submissions
+    const uniqueStaff = [...new Set(userState.mySubmissions.map(sub => sub.staffName).filter(Boolean))];
+    userState.uniqueStaffList = uniqueStaff.sort();
+    
+    // Preserve current selection
+    const currentSelection = staffSelect.value;
+    
+    // Build options HTML
+    let optionsHtml = '<option value="all">All Staff</option>';
+    uniqueStaff.forEach(staff => {
+        const selected = staff === currentSelection ? 'selected' : '';
+        optionsHtml += `<option value="${staff}" ${selected}>👤 ${staff}</option>`;
+    });
+    
+    staffSelect.innerHTML = optionsHtml;
+    
+    console.log('👥 Staff filter populated with', uniqueStaff.length, 'staff members');
+}
+
+function applySubmissionFilters() {
+    // Read filter values from UI
+    const staffFilter = document.getElementById('staffFilter');
+    const fromDateFilter = document.getElementById('submissionFromDate');
+    const toDateFilter = document.getElementById('submissionToDate');
+    
+    userState.submissionFilters.staff = staffFilter?.value || 'all';
+    userState.submissionFilters.fromDate = fromDateFilter?.value || '';
+    userState.submissionFilters.toDate = toDateFilter?.value || '';
+    
+    console.log('🔍 Applying submission filters:', userState.submissionFilters);
+    
+    // Re-render submissions with filters
+    renderSubmissionHistory();
+}
+
+function clearSubmissionFilters() {
+    // Reset filter values
+    const staffFilter = document.getElementById('staffFilter');
+    const fromDateFilter = document.getElementById('submissionFromDate');
+    const toDateFilter = document.getElementById('submissionToDate');
+    
+    if (staffFilter) staffFilter.value = 'all';
+    if (fromDateFilter) fromDateFilter.value = '';
+    if (toDateFilter) toDateFilter.value = '';
+    
+    // Reset state
+    userState.submissionFilters = {
+        staff: 'all',
+        fromDate: '',
+        toDate: ''
+    };
+    
+    console.log('🔄 Submission filters cleared');
+    
+    // Re-render
+    renderSubmissionHistory();
 }
 
 // Export new functions
@@ -2004,4 +2308,6 @@ window.viewSubmissionDetails = viewSubmissionDetails;
 window.closeDetailsModal = closeDetailsModal;
 window.editMySubmission = editMySubmission;
 window.updatePSSStats = updatePSSStats;
-window.clearStatsFilter = clearStatsFilter;
+window.applySubmissionFilters = applySubmissionFilters;
+window.clearSubmissionFilters = clearSubmissionFilters;
+window.populateStaffFilter = populateStaffFilter;
