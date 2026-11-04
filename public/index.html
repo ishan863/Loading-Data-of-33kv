@@ -1717,11 +1717,16 @@
                             </div>
                             <div style="display: flex; gap: 1rem;">
                                 <button id="saveApiKeyBtn" class="btn-primary" style="flex: 1;">💾 Save Configuration</button>
+                                <button id="refreshModelsBtn" class="btn-primary" style="flex: 1; background: rgba(16,185,129,0.2); border: 1px solid rgba(16,185,129,0.5);">🔄 Refresh Models</button>
                                 <button id="testChatBtn" class="btn-primary" style="flex: 1; background: rgba(16,185,129,0.3); border: 1px solid rgba(16,185,129,0.5);">🧪 Test Connection</button>
                             </div>
-                            <p style="margin: 0; font-size: 11px; color: rgba(255,255,255,0.5);">
+                            <div id="modelStatus" style="margin-top: 0.75rem; font-size: 11px; padding: 0.5rem; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); border-radius: 6px; color: #34d399; display: none;">
+                                📋 Models loaded from API
+                            </div>
+                            <p style="margin: 0; font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 0.5rem;">
                                 <strong style="color: #10b981;">RECOMMENDED:</strong> Qwen3 235B & DeepSeek R1T - Most powerful free models with NO rate limits!
                                 <br>Groq models are faster but limited to 100K tokens/day. <a href="https://openrouter.ai/keys" target="_blank" style="color: #a78bfa;">Get OpenRouter Key</a>
+                                <br><strong style="color: #f59e0b;">TIP:</strong> Browser CORS may block automatic model listing. Use the <strong>Custom Model</strong> field with your exact model ID (e.g., <code>groq/llama-3.1-8b-instant</code>) for guaranteed results.
                             </p>
                         </div>
                     </div>

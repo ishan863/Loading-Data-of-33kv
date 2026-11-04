@@ -192,6 +192,72 @@ function initializeChatbot() {
         if (clearChatBtn) clearChatBtn.addEventListener('click', clearChat);
         if (testChatBtn) testChatBtn.addEventListener('click', testChatbot);
         
+        // Refresh models button
+        const refreshModelsBtn = document.getElementById('refreshModelsBtn');
+        if (refreshModelsBtn) {
+            refreshModelsBtn.addEventListener('click', async () => {
+                const groqKey = document.getElementById('groqApiKey')?.value.trim() || '';
+                const apiKey = document.getElementById('openrouterApiKey')?.value.trim() || '';
+                const keyToUse = groqKey || apiKey;
+                const provider = groqKey ? 'groq' : 'openrouter';
+                
+                if (!keyToUse) {
+                    alert('Please enter an API key first.');
+                    return;
+                }
+                
+                refreshModelsBtn.innerHTML = '⏳ Fetching...';
+                refreshModelsBtn.disabled = true;
+                
+                try {
+                    const models = await fetchAvailableModels(keyToUse, provider);
+                    currentProvider = provider;
+                    availableModels = models;
+                    populateModelDropdown(models, provider);
+                    
+                    const statusEl = document.getElementById('modelStatus');
+                    if (statusEl) {
+                        statusEl.style.display = 'block';
+                        statusEl.textContent = `📋 ${models.length} models loaded from ${provider}`;
+                        statusEl.style.background = models.length > 0 
+                            ? 'rgba(16,185,129,0.15)' 
+                            : 'rgba(239,68,68,0.15)';
+                        statusEl.style.color = models.length > 0 
+                            ? '#34d399' 
+                            : '#f87171';
+                    }
+                    
+                    refreshModelsBtn.innerHTML = models.length > 0 ? '✅ Refreshed' : '❌ No Models';
+                    refreshModelsBtn.style.background = models.length > 0 
+                        ? 'rgba(16,185,129,0.3)' 
+                        : 'rgba(239,68,68,0.3)';
+                    
+                    setTimeout(() => {
+                        refreshModelsBtn.innerHTML = '🔄 Refresh Models';
+                        refreshModelsBtn.style.background = 'rgba(16,185,129,0.2)';
+                        refreshModelsBtn.disabled = false;
+                    }, 2000);
+                    
+                } catch (err) {
+                    console.warn('Model fetch failed:', err.message);
+                    const statusEl = document.getElementById('modelStatus');
+                    if (statusEl) {
+                        statusEl.style.display = 'block';
+                        statusEl.textContent = `❌ Fetch failed: ${err.message}`;
+                        statusEl.style.background = 'rgba(239,68,68,0.15)';
+                        statusEl.style.color = '#f87171';
+                    }
+                    refreshModelsBtn.innerHTML = '❌ Failed';
+                    refreshModelsBtn.style.background = 'rgba(239,68,68,0.3)';
+                    setTimeout(() => {
+                        refreshModelsBtn.innerHTML = '🔄 Refresh Models';
+                        refreshModelsBtn.style.background = 'rgba(16,185,129,0.2)';
+                        refreshModelsBtn.disabled = false;
+                    }, 2000);
+                }
+            });
+        }
+        
         // Chat input enter key
         if (chatInput) {
             chatInput.addEventListener('keydown', (e) => {
@@ -553,21 +619,30 @@ async function saveApiKey() {
         // Fetch available models dynamically
         const keyToUse = groqKey || apiKey;
         const provider = groqKey ? 'groq' : 'openrouter';
+        let modelsLoaded = 0;
         if (keyToUse) {
             try {
-                updateTypingStatus('🔍 Fetching available models...');
+                btn.innerHTML = '⏳ Fetching models...';
                 const models = await fetchAvailableModels(keyToUse, provider);
                 currentProvider = provider;
                 availableModels = models;
-                populateModelDropdown(models, provider);
-                console.log(`✅ Loaded ${models.length} models from ${provider}`);
+                modelsLoaded = models.length;
+                if (models.length > 0) {
+                    populateModelDropdown(models, provider);
+                    console.log(`✅ Loaded ${models.length} models from ${provider}`);
+                } else {
+                    console.warn('Model fetch returned empty, keeping defaults');
+                }
             } catch (err) {
                 console.warn('Model fetch failed, keeping defaults:', err.message);
             }
         }
         
-        // Show success
-        btn.innerHTML = '✅ Saved Successfully!';
+        // Show success with model count
+        const modelMsg = modelsLoaded > 0 
+            ? ` ✅ Saved! ${modelsLoaded} models loaded from ${provider}.`
+            : ` ✅ Saved! (Model list fetch blocked by browser CORS - use Custom Model field above)`;
+        btn.innerHTML = modelMsg;
         btn.style.background = 'rgba(16, 185, 129, 0.3)';
         
         console.log('✅ Configuration saved:', { model, hasGroq: !!groqKey, hasOpenRouter: !!apiKey, modelsLoaded: availableModels.length });
