@@ -119,6 +119,110 @@ function populateModelDropdown(models, provider) {
 }
 
 // ============================================
+// SETTINGS TAB BUTTON SETUP (runs independently of AI tab)
+// ============================================
+
+function setupSettingsButtons() {
+    const saveApiKeyBtn = document.getElementById('saveApiKeyBtn');
+    const testChatBtn = document.getElementById('testChatBtn');
+    const refreshModelsBtn = document.getElementById('refreshModelsBtn');
+
+    if (saveApiKeyBtn) {
+        saveApiKeyBtn.addEventListener('click', saveApiKey);
+    }
+    if (testChatBtn) {
+        testChatBtn.addEventListener('click', testChatbot);
+    }
+    if (refreshModelsBtn) {
+        refreshModelsBtn.addEventListener('click', async () => {
+            const groqKey = document.getElementById('groqApiKey')?.value.trim() || '';
+            const apiKey = document.getElementById('openrouterApiKey')?.value.trim() || '';
+            const keyToUse = groqKey || apiKey;
+            const provider = groqKey ? 'groq' : 'openrouter';
+
+            if (!keyToUse) {
+                alert('Please enter an API key first.');
+                return;
+            }
+
+            refreshModelsBtn.innerHTML = '⏳ Fetching...';
+            refreshModelsBtn.disabled = true;
+
+            try {
+                const models = await fetchAvailableModels(keyToUse, provider);
+                currentProvider = provider;
+                availableModels = models;
+                populateModelDropdown(models, provider);
+
+                const statusEl = document.getElementById('modelStatus');
+                if (statusEl) {
+                    statusEl.style.display = 'block';
+                    statusEl.textContent = `📋 ${models.length} models loaded from ${provider}`;
+                    statusEl.style.background = models.length > 0
+                        ? 'rgba(16,185,129,0.15)'
+                        : 'rgba(239,68,68,0.15)';
+                    statusEl.style.color = models.length > 0
+                        ? '#34d399'
+                        : '#f87171';
+                }
+
+                refreshModelsBtn.innerHTML = models.length > 0 ? '✅ Refreshed' : '❌ No Models';
+                refreshModelsBtn.style.background = models.length > 0
+                    ? 'rgba(16,185,129,0.3)'
+                    : 'rgba(239,68,68,0.3)';
+
+                setTimeout(() => {
+                    refreshModelsBtn.innerHTML = '🔄 Refresh Models';
+                    refreshModelsBtn.style.background = 'rgba(16,185,129,0.2)';
+                    refreshModelsBtn.disabled = false;
+                }, 2000);
+
+            } catch (err) {
+                console.warn('Model fetch failed:', err.message);
+                const statusEl = document.getElementById('modelStatus');
+                if (statusEl) {
+                    statusEl.style.display = 'block';
+                    statusEl.textContent = `❌ Fetch failed: ${err.message}`;
+                    statusEl.style.background = 'rgba(239,68,68,0.15)';
+                    statusEl.style.color = '#f87171';
+                }
+                refreshModelsBtn.innerHTML = '❌ Failed';
+                refreshModelsBtn.style.background = 'rgba(239,68,68,0.3)';
+                setTimeout(() => {
+                    refreshModelsBtn.innerHTML = '🔄 Refresh Models';
+                    refreshModelsBtn.style.background = 'rgba(16,185,129,0.2)';
+                    refreshModelsBtn.disabled = false;
+                }, 2000);
+            }
+        });
+    }
+
+    // Load saved values into inputs on settings tab load
+    const savedGroq = localStorage.getItem('groqApiKey');
+    const savedOpenRouter = localStorage.getItem('openrouterApiKey');
+    const savedCustom = localStorage.getItem('customModel');
+    if (savedGroq) {
+        const el = document.getElementById('groqApiKey');
+        if (el) el.value = savedGroq;
+    }
+    if (savedOpenRouter) {
+        const el = document.getElementById('openrouterApiKey');
+        if (el) el.value = savedOpenRouter;
+    }
+    if (savedCustom) {
+        const el = document.getElementById('customModelInput');
+        if (el) el.value = savedCustom;
+    }
+}
+
+// Run settings button setup when DOM is ready
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupSettingsButtons);
+} else {
+    setupSettingsButtons();
+}
+
+// ============================================
 // INITIALIZATION
 // ============================================
 
