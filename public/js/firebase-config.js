@@ -2,12 +2,12 @@
 // Replace these values with your Firebase project credentials
 
 const firebaseConfig = {
-  apiKey: "AIzaSyCPN46YkG5NlOcZiTy3W748lDUKVWdq2Gg",
-  authDomain: "pss-loading-data-4e817.firebaseapp.com",
-  projectId: "pss-loading-data-4e817",
-  storageBucket: "pss-loading-data-4e817.firebasestorage.app",
-  messagingSenderId: "136985780442",
-  appId: "1:136985780442:web:a941c7e63921588e9c05e3"
+  apiKey: "AIzaSyCNTu9cgnV129XNtyfPTlM0O8xhSARApyQ",
+  authDomain: "loading-data-33kv.firebaseapp.com",
+  projectId: "loading-data-33kv",
+  storageBucket: "loading-data-33kv.firebasestorage.app",
+  messagingSenderId: "511899118817",
+  appId: "1:511899118817:web:0eafc3cf2b906a8b085ba0"
 };
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
@@ -22,7 +22,7 @@ db.enablePersistence()
         if (err.code == 'failed-precondition') {
             console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time.');
         } else if (err.code == 'unimplemented') {
-            console.warn('The current browser does not support offline persistence');
+            console.warn('Multiple tabs open, persistence can only be enabled in one tab at a time.');
         }
     });
 

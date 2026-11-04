@@ -772,6 +772,7 @@
                 <button class="admin-tab" data-tab="view">👁️ View All</button>
                 <button class="admin-tab" data-tab="analytics">📈 Analytics</button>
                 <button class="admin-tab" data-tab="ai-assistant">🤖 AI Assistant</button>
+                <button class="admin-tab" data-tab="manage">Manage</button>
                 <button class="admin-tab" data-tab="settings">⚙️ Settings</button>
             </div>
 
@@ -870,6 +871,15 @@
                         <h3>📥 Upload Excel File</h3>
                         <p style="color: rgba(255,255,255,0.7); margin-bottom: 1.5rem;">Upload your Excel file - System will compare with existing data and highlight changes</p>
                         
+                        <div class="form-group" style="max-width: 460px; margin-bottom: 1rem;">
+                            <label>Data Type in this file</label>
+                            <select id="excelDataType" class="form-control" style="padding: 12px; background: rgba(30,41,59,0.95); color: white; border: 2px solid rgba(168,85,247,0.3); border-radius: 8px;">
+                                <option value="auto" selected>Auto-detect (recommended)</option>
+                                <option value="users">Users / Staff</option>
+                                <option value="pss_stations">PSS Stations / Feeders</option>
+                                <option value="daily_entries">Daily Loading Data</option>
+                            </select>
+                        </div>
                         <input type="file" id="excelPreviewInput" accept=".xlsx,.xls,.csv" style="display: none;">
                         <button class="btn-primary" onclick="document.getElementById('excelPreviewInput').click()" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); padding: 14px 32px; font-size: 16px;">
                             📁 Choose Excel File to Upload
@@ -1566,6 +1576,70 @@
                 </div>
             </div>
 
+            <div id="manageTab" class="admin-tab-content">
+                <h2>Manage Users, PSS Stations & Phone Numbers</h2>
+                <p style="color: rgba(255,255,255,0.65); margin-bottom: 1.5rem;">
+                    Changes are written to Firebase immediately and appear on staff screens without refresh.
+                </p>
+
+                <div class="settings-grid">
+                    <div class="settings-card" style="grid-column: span 2;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
+                            <h3 style="margin:0;">Users <span id="managedUsersCount" style="font-size:13px; color:#94a3b8;"></span></h3>
+                            <button class="btn-primary" onclick="openManagedUserEditor()">Add User</button>
+                        </div>
+                        <div style="margin-top:1rem;">
+                            <input type="text" id="manageUserSearch" class="form-control" placeholder="Search by name, phone, PSS or role..." oninput="renderManageUsers()" style="max-width:420px;">
+                        </div>
+                        <div class="card-grid" id="manageUsersBody" style="margin-top:1rem;">
+                            <div class="empty-list">Loading users...</div>
+                        </div>
+                    </div>
+
+                    <div class="settings-card" style="grid-column: span 2;">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap;">
+                            <h3 style="margin:0;">PSS Stations <span id="managedPSSCount" style="font-size:13px; color:#94a3b8;"></span></h3>
+                            <button class="btn-primary" onclick="openManagedPSSEditor()">Add PSS Station</button>
+                        </div>
+                        <div class="card-grid" id="managePSSBody" style="margin-top:1rem;">
+                            <div class="empty-list">Loading PSS stations...</div>
+                        </div>
+                    </div>
+
+                    <div class="settings-card" style="grid-column: span 2;">
+                        <h3>Phone Number Migration</h3>
+                        <p style="font-size:12px; color:rgba(255,255,255,0.65);">
+                            One change per line: <strong>old_number,new_number</strong> or <strong>old_number -&gt; new_number</strong>.
+                            This updates the user account and every daily entry that uses the old number.
+                        </p>
+                        <textarea id="phoneMigrationInput" class="form-control" rows="5" placeholder="809306117,8093061170&#10;9124581423,9124581424" style="width:100%; font-family:monospace;"></textarea>
+                        <div style="display:flex; gap:1rem; margin-top:1rem; flex-wrap:wrap;">
+                            <button class="btn-primary" onclick="previewPhoneMigration()">Preview Changes</button>
+                            <button class="btn-primary" onclick="applyPhoneMigration()" style="background:linear-gradient(135deg,#10b981,#059669);">Apply Changes</button>
+                            <button class="btn-secondary" onclick="applyPssPhoneMapping(window.PSS_PHONE_MAPPING, { adminPhone: '8018825973' })">Apply PSS-wise Mapping</button>
+                        </div>
+                        <div id="phoneMigrationPreview" style="margin-top:1rem; font-size:13px; color:rgba(255,255,255,0.8);"></div>
+                    </div>
+
+                    <div class="settings-card">
+                        <h3>Backup & Restore</h3>
+                        <p style="font-size:12px; color:rgba(255,255,255,0.65);">Download a full JSON backup from the old site, then restore it after deploying to the new Firebase project.</p>
+                        <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-top:1rem;">
+                            <button class="btn-primary" onclick="backupDatabase()">Download Backup</button>
+                            <button class="btn-primary" onclick="document.getElementById('restoreBackupInput').click()">Restore Backup</button>
+                        </div>
+                        <input type="file" id="restoreBackupInput" accept=".json" style="display:none;" onchange="restoreDatabase(this.files[0]); this.value='';">
+                        <div id="restoreStatus" style="margin-top:0.75rem; font-size:12px; color:rgba(255,255,255,0.7);"></div>
+                    </div>
+
+                    <div class="settings-card">
+                        <h3>Data Limits</h3>
+                        <p style="font-size:12px; color:rgba(255,255,255,0.65);">Realtime screens show the newest records automatically. The AI assistant loads the full archive in pages.</p>
+                        <p style="font-size:12px; color:rgba(255,255,255,0.65); margin-top:0.5rem;">UI window: <strong id="realtimeLimitLabel">newest 2000 entries</strong></p>
+                    </div>
+                </div>
+            </div>
+
             <div id="settingsTab" class="admin-tab-content">
                 <h2>⚙️ System Settings</h2>
                 <div class="settings-grid">
@@ -1628,6 +1702,18 @@
                                         <option value="google/gemini-flash-1.5">Gemini Flash 1.5 ($)</option>
                                     </optgroup>
                                 </select>
+                            </div>
+                            <div>
+                                <label style="display: block; color: #a78bfa; margin-bottom: 0.5rem; font-size: 12px;">Custom Model (Optional - override dropdown)</label>
+                                <input 
+                                    type="text" 
+                                    id="customModelInput" 
+                                    placeholder="e.g. groq/llama-3.1-8b-instant or deepseek/deepseek-chat:free"
+                                    style="width: 100%; padding: 0.75rem; background: rgba(30,41,59,0.8); border: 1px solid rgba(168,85,247,0.3); border-radius: 8px; color: white; font-family: monospace; font-size: 13px;"
+                                />
+                                <p style="margin: 0; font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 0.25rem;">
+                                    Leave empty to use dropdown selection. Enter exact model ID from your provider dashboard.
+                                </p>
                             </div>
                             <div style="display: flex; gap: 1rem;">
                                 <button id="saveApiKeyBtn" class="btn-primary" style="flex: 1;">💾 Save Configuration</button>
@@ -1983,17 +2069,17 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.4/gsap.min.js"></script>
 
     <!-- App Scripts (Order matters - dependencies first) -->
-    <script src="js/firebase-config.js?v=99"></script>
-    <script src="js/app.js?v=99"></script>
-    <script src="js/analytics.js?v=99"></script>
-    <script src="js/excel-handler.js?v=99"></script>
-    <script src="js/auth.js?v=99"></script>
-    <script src="js/new-dashboard-analytics.js?v=99"></script>
-    <script src="js/new-analytics.js?v=99"></script>
-    <script src="js/chatbot.js?v=2"></script>
-    <script src="js/admin.js?v=34"></script>
-    <script src="js/custom-select.js?v=5"></script>
-    <script src="js/user.js?v=39"></script>
+    <script src="js/firebase-config.js?v=100"></script>
+    <script src="js/app.js?v=100"></script>
+    <script src="js/analytics.js?v=100"></script>
+    <script src="js/excel-handler.js?v=100"></script>
+    <script src="js/auth.js?v=100"></script>
+    <script src="js/new-dashboard-analytics.js?v=100"></script>
+    <script src="js/new-analytics.js?v=100"></script>
+    <script src="js/chatbot.js?v=100"></script>
+    <script src="js/admin.js?v=100"></script>
+    <script src="js/custom-select.js?v=100"></script>
+    <script src="js/user.js?v=100"></script>
     <!-- form-handler.js removed - using wizard in user.js -->
 
 </body>

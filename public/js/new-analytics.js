@@ -529,8 +529,10 @@ function renderFeederRadarChart(data) {
 
     if (analyticsCharts.feederRadar) analyticsCharts.feederRadar.destroy();
 
-    // Get latest entry with feeders
-    const latestEntry = data.slice().reverse().find(e => e.feeders && Object.keys(e.feeders).length > 0);
+    // Get latest entry with feeders (data is usually newest-first, but do not rely on it)
+    const latestEntry = [...data]
+        .filter(entry => entry.feeders && Object.keys(entry.feeders).length > 0)
+        .sort((a, b) => (typeof entrySortValue === 'function' ? entrySortValue(b) - entrySortValue(a) : 0))[0];
     if (!latestEntry || !latestEntry.feeders) {
         console.log('⚠️ No feeder data for radar chart');
         return;
@@ -542,7 +544,7 @@ function renderFeederRadarChart(data) {
     const avgVoltages = [];
 
     Object.values(latestEntry.feeders).slice(0, 6).forEach(feeder => {
-        feederNames.push(feeder.feederName || 'Unnamed');
+        feederNames.push(feeder.feederName || feeder.name || 'Unnamed');
         maxLoads.push(parseFloat(feeder.maxLoad || 0));
         maxVoltages.push(parseFloat(feeder.maxVoltage || 0));
         const avgV = (parseFloat(feeder.maxVoltage || 0) + parseFloat(feeder.minVoltage || 0)) / 2;

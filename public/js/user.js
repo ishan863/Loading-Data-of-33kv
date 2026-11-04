@@ -23,6 +23,13 @@ let currentWizardStep = 0;
 let currentClockInput = null;
 let selectedHour = 0;
 let selectedMinute = 0;
+let editingSubmissionId = null;
+let pendingEditData = null;
+let userRealtimeUnsubscribe = null;
+
+function getActivePSSStation() {
+    return pendingEditData?.pssStation || appState.currentUser?.pssStation || '';
+}
 
 // ============================================
 // INITIALIZE USER DASHBOARD
@@ -71,25 +78,24 @@ async function loadUserDashboard() {
 
 async function loadMySubmissions() {
     try {
-        const phoneNumber = appState.currentUser.phoneNumber;
-        console.log('📊 Loading submissions for phone:', phoneNumber);
+        const phoneNumber = normalizePhone(appState.currentUser.phoneNumber);
+        console.log('Loading submissions for phone:', phoneNumber);
         
-        const submissionsSnapshot = await db.collection('daily_entries')
-            .where('phoneNumber', '==', phoneNumber)
-            .limit(100)
-            .get();
+        const [primarySnapshot, legacySnapshot] = await Promise.all([
+            db.collection('daily_entries')
+                .where('phoneNumber', '==', phoneNumber)
+                .limit(1000)
+                .get(),
+            db.collection('daily_entries')
+                .where('phone', '==', phoneNumber)
+                .limit(1000)
+                .get()
+        ]);
         
-        userState.mySubmissions = submissionsSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-        
-        // Sort by timestamp DESC (latest first) - client-side sorting
-        userState.mySubmissions.sort((a, b) => {
-            const timeA = a.timestamp?.toDate?.() || new Date(a.timestamp || 0);
-            const timeB = b.timestamp?.toDate?.() || new Date(b.timestamp || 0);
-            return timeB - timeA; // Descending order (newest first)
-        });
+        const submissions = new Map();
+        primarySnapshot.docs.forEach(doc => submissions.set(doc.id, { id: doc.id, ...doc.data() }));
+        legacySnapshot.docs.forEach(doc => submissions.set(doc.id, { id: doc.id, ...doc.data() }));
+        userState.mySubmissions = sortEntriesDesc(decorateEntries([...submissions.values()]));
         
         console.log('✅ Loaded', userState.mySubmissions.length, 'submissions');
         
@@ -111,20 +117,21 @@ async function loadMySubmissions() {
 // ============================================
 
 function calculateUserStatistics() {
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayLocalISO();
     const thisMonth = today.substring(0, 7); // YYYY-MM
     
     // Filter submissions by current user's phone number or name
-    const mySubmissions = userState.mySubmissions.filter(s => 
-        s.phoneNumber === appState.currentUser.phoneNumber || 
+    const myPhone = normalizePhone(appState.currentUser.phoneNumber);
+    const mySubmissions = userState.mySubmissions.filter(s =>
+        normalizePhone(s.phoneNumber) === myPhone ||
         s.staffName === appState.currentUser.name
     );
     
     // Today's submissions
-    const todaySubmissions = mySubmissions.filter(s => s.date === today);
+    const todaySubmissions = mySubmissions.filter(s => normalizeDateValue(s.date) === today);
     
     // This month's submissions
-    const monthSubmissions = mySubmissions.filter(s => s.date && s.date.startsWith(thisMonth));
+    const monthSubmissions = mySubmissions.filter(s => normalizeDateValue(s.date).startsWith(thisMonth));
     
     // Total submissions
     const totalSubmissions = mySubmissions.length;
@@ -140,7 +147,7 @@ function calculateUserStatistics() {
     let allMinLoads = [];
     
     if (todaySubmissions.length > 0) {
-        const latestToday = todaySubmissions[todaySubmissions.length - 1];
+        const latestToday = todaySubmissions[0];
         
         // I/C Data
         if (latestToday.ic1) {
@@ -287,14 +294,13 @@ function calculateStreak(submissions) {
     if (dates.length === 0) return 0;
     
     let streak = 0;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = new Date(`${todayLocalISO()}T12:00:00+05:30`);
     
     // Check each day backwards from today
     for (let i = 0; i <= 365; i++) { // Max 1 year streak
         const checkDate = new Date(today);
         checkDate.setDate(checkDate.getDate() - i);
-        const checkDateStr = checkDate.toISOString().split('T')[0];
+        const checkDateStr = toLocalISODate(checkDate);
         
         if (dates.includes(checkDateStr)) {
             streak++;
@@ -935,23 +941,30 @@ async function editMySubmission(submissionId) {
 // REAL-TIME LISTENERS
 // ============================================
 
+function stopUserRealtimeListeners() {
+    if (userRealtimeUnsubscribe) {
+        try { userRealtimeUnsubscribe(); } catch (error) { console.warn('User listener cleanup failed:', error); }
+        userRealtimeUnsubscribe = null;
+    }
+}
+window.stopUserRealtimeListeners = stopUserRealtimeListeners;
+
 function startUserRealTimeListeners() {
+    stopUserRealtimeListeners();
     // Listen for all changes to submissions by this user
-    db.collection('daily_entries')
-        .where('phoneNumber', '==', appState.currentUser.phoneNumber)
-        // .orderBy('timestamp', 'desc')  // Temporarily disabled - needs Firestore index
+    userRealtimeUnsubscribe = db.collection('daily_entries')
+        .where('phoneNumber', '==', normalizePhone(appState.currentUser.phoneNumber))
         .onSnapshot(snapshot => {
             let hasChanges = false;
             
             snapshot.docChanges().forEach(change => {
-                const docData = { id: change.doc.id, ...change.doc.data() };
+                const docData = decorateEntry({ id: change.doc.id, ...change.doc.data() });
                 
                 if (change.type === 'added') {
                     // Add if not already in array
                     if (!userState.mySubmissions.find(s => s.id === docData.id)) {
-                        userState.mySubmissions.unshift(docData);
+                        userState.mySubmissions.push(docData);
                         hasChanges = true;
-                        console.log('✅ New submission added:', docData.id);
                     }
                 } else if (change.type === 'modified') {
                     // Update existing submission
@@ -974,12 +987,13 @@ function startUserRealTimeListeners() {
             
             // Only refresh if there were actual changes
             if (hasChanges) {
+                userState.mySubmissions = sortEntriesDesc(decorateEntries(userState.mySubmissions));
                 calculateUserStatistics();
                 renderDashboard();
                 renderSubmissionHistory();
             }
         }, error => {
-            console.error('❌ Real-time listener error:', error);
+            console.error('Real-time listener error:', error);
         });
 }
 
@@ -1212,11 +1226,10 @@ window.selectMinute = selectMinute;
 // NEW ENTRY FORM FUNCTIONS
 // ============================================
 
-function openNewEntryForm() {
-    console.log('Opening new entry form...');
-    console.log('Current user:', appState.currentUser);
-    console.log('PSS Config:', appState.pssConfig);
-    console.log('All appState:', appState);
+function openNewEntryForm(submission = null) {
+    editingSubmissionId = submission?.id || null;
+    pendingEditData = submission || null;
+    console.log('Opening entry form...', submission ? `editing ${submission.id}` : 'new entry');
     
     const modal = document.getElementById('newEntryModal');
     const formPSSStation = document.getElementById('formPSSStation');
@@ -1224,9 +1237,12 @@ function openNewEntryForm() {
     const linemenCards = document.getElementById('linemenCards');
     const helpersCards = document.getElementById('helpersCards');
     
-    // Set PSS Station (from logged-in user)
-    const pssStation = appState.currentUser.pssStation || appState.currentUser.name || 'KUNDUKELA';
+    // Use the record's station when an admin edits another PSS.
+    const pssStation = submission?.pssStation || getActivePSSStation() || Object.keys(appState.pssConfig || {})[0] || 'KUNDUKELA';
     formPSSStation.value = pssStation;
+    formDate.value = submission?.date ? normalizeDateValue(submission.date) : todayLocalISO();
+    const submitBtn = document.getElementById('submitBtn');
+    if (submitBtn) submitBtn.textContent = submission ? 'Update Data' : 'Submit Data';
     console.log('PSS Station:', pssStation);
     
     // Clear previous selections
@@ -1265,10 +1281,15 @@ function openNewEntryForm() {
         db.collection('pss_stations').get().then(snapshot => {
             appState.pssConfig = {};
             snapshot.forEach(doc => {
-                appState.pssConfig[doc.id] = doc.data();
+                const data = doc.data() || {};
+                const name = String(data.name || '').trim();
+                if (!data.name) data.name = doc.id;
+                appState.pssConfig[doc.id] = data;
+                if (name && !appState.pssConfig[name]) appState.pssConfig[name] = data;
             });
             console.log('✅ PSS Config reloaded:', appState.pssConfig);
             populateStaffCards(pssStation, linemenCards, helpersCards);
+    applyPendingStaffSelection();
         }).catch(error => {
             console.error('❌ Error reloading PSS config:', error);
             linemenCards.innerHTML = '<p style="color: #ef4444;">Error loading staff. Please reload page.</p>';
@@ -1279,10 +1300,9 @@ function openNewEntryForm() {
     
     // Populate staff cards
     populateStaffCards(pssStation, linemenCards, helpersCards);
+    applyPendingStaffSelection();
     
-    // Set today's date as default
-    const today = new Date().toISOString().split('T')[0];
-    formDate.value = today;
+    if (!formDate.value) formDate.value = todayLocalISO();
 }
 
 function populateStaffCards(pssStation, linemenCards, helpersCards) {
@@ -1309,8 +1329,9 @@ function populateStaffCards(pssStation, linemenCards, helpersCards) {
     
     if (pssData) {
         // Add linemen cards - check both 'lineman' (singular) and 'linemen' (plural)
-        const linemenList = pssData.lineman || pssData.linemen || [];
-        if (Array.isArray(linemenList) && linemenList.length > 0) {
+        const rawLinemen = pssData.lineman || pssData.linemen || [];
+        const linemenList = (Array.isArray(rawLinemen) ? rawLinemen : String(rawLinemen).split(/[\n,]+/)).map(n => String(n).trim()).filter(Boolean);
+        if (linemenList.length > 0) {
             console.log('Linemen:', linemenList);
             linemenList.forEach(name => {
                 if (name && name.trim()) {
@@ -1332,8 +1353,9 @@ function populateStaffCards(pssStation, linemenCards, helpersCards) {
         }
         
         // Add helpers cards - check both 'helper' (singular) and 'helpers' (plural)
-        const helpersList = pssData.helper || pssData.helpers || [];
-        if (Array.isArray(helpersList) && helpersList.length > 0) {
+        const rawHelpers = pssData.helper || pssData.helpers || [];
+        const helpersList = (Array.isArray(rawHelpers) ? rawHelpers : String(rawHelpers).split(/[\n,]+/)).map(n => String(n).trim()).filter(Boolean);
+        if (helpersList.length > 0) {
             console.log('Helpers:', helpersList);
             helpersList.forEach(name => {
                 if (name && name.trim()) {
@@ -1366,6 +1388,30 @@ function populateStaffCards(pssStation, linemenCards, helpersCards) {
     }
 }
 
+function applyPendingStaffSelection() {
+    if (!pendingEditData || !pendingEditData.staffName) return;
+    const name = pendingEditData.staffName;
+    const cards = Array.from(document.querySelectorAll('#linemenCards .staff-card, #helpersCards .staff-card'));
+    const match = cards.find(card => (card.querySelector('.staff-card-name')?.textContent || '').trim() === name);
+    if (match) {
+        selectStaffMember(name, match);
+        return;
+    }
+    const container = document.getElementById('helpersCards') || document.getElementById('linemenCards');
+    if (!container) return;
+    const placeholder = container.querySelector('p');
+    if (placeholder) placeholder.remove();
+    const card = document.createElement('div');
+    card.className = 'staff-card selected';
+    const nameEl = document.createElement('span');
+    nameEl.className = 'staff-card-name';
+    nameEl.textContent = name;
+    card.appendChild(nameEl);
+    card.onclick = () => selectStaffMember(name, card);
+    container.appendChild(card);
+    document.getElementById('selectedStaffMember').value = name;
+}
+
 function selectStaffMember(name, clickedCard) {
     // Remove selected class from all cards
     document.querySelectorAll('.staff-card').forEach(card => {
@@ -1381,6 +1427,11 @@ function selectStaffMember(name, clickedCard) {
 
 function closeNewEntryForm() {
     document.getElementById('newEntryModal').style.display = 'none';
+    editingSubmissionId = null;
+    pendingEditData = null;
+    const submitBtn = document.getElementById('submitBtn');
+    if (submitBtn) submitBtn.textContent = 'Submit Data';
+    document.getElementById('selectedStaffMember').value = '';
     // Reset wizard to step 0
     currentWizardStep = 0;
     updateWizardButtons();
@@ -1436,6 +1487,8 @@ function nextStep() {
     } else if (currentWizardStep === 4) {
         generateEquipmentSection();
     }
+
+    applyEditDataToCurrentStep();
     
     // Show new step
     const newStepEl = document.querySelector(`.stepper-step[data-step="${currentWizardStep}"]`);
@@ -1593,7 +1646,7 @@ function generateICSection() {
 
 function generatePTRSection() {
     const container = document.getElementById('ptrContainer');
-    const pssStation = appState.currentUser.pssStation;
+    const pssStation = getActivePSSStation();
     
     console.log('🔍 Generating PTR section...');
     console.log('  PSS Station:', pssStation);
@@ -1633,7 +1686,7 @@ function generatePTRSection() {
 
 function generateFeederSection() {
     const container = document.getElementById('feedersContainer');
-    const pssStation = appState.currentUser.pssStation;
+    const pssStation = getActivePSSStation();
     
     console.log('🔍 Generating feeder section...');
     console.log('  PSS Station:', pssStation);
@@ -1878,6 +1931,106 @@ function collectEquipmentData(idPrefix) {
 }
 
 // ============================================
+// EDIT SUPPORT
+// ============================================
+
+function getPSSConfigFor(name) {
+    if (!name) return null;
+    if (appState.pssConfig[name]) return appState.pssConfig[name];
+    const key = Object.keys(appState.pssConfig || {}).find(k => k.toLowerCase() === name.toLowerCase());
+    if (key) return appState.pssConfig[key];
+    const all = Object.values(appState.pssConfig || {});
+    const match = all.find(cfg => {
+    const alts = Array.isArray(cfg.alternateNames) ? cfg.alternateNames : [];
+    return alts.some(a => String(a).trim().toLowerCase() === String(name).trim().toLowerCase());
+    });
+    return match || null;
+}
+
+function setFormValue(id, value) {
+    const el = document.getElementById(id);
+    if (!el || value === undefined || value === null) return;
+    el.value = value;
+}
+
+function fillEquipmentFields(prefix, data) {
+    if (!data) return;
+    setFormValue(`${prefix}_max_voltage`, data.maxVoltage);
+    setFormValue(`${prefix}_max_voltage_time`, data.maxVoltageTime);
+    setFormValue(`${prefix}_min_voltage`, data.minVoltage);
+    setFormValue(`${prefix}_min_voltage_time`, data.minVoltageTime);
+    setFormValue(`${prefix}_max_load`, data.maxLoad);
+    setFormValue(`${prefix}_max_load_time`, data.maxLoadTime);
+    setFormValue(`${prefix}_min_load`, data.minLoad);
+    setFormValue(`${prefix}_min_load_time`, data.minLoadTime);
+}
+
+function getConfiguredFeederNames(pssStation) {
+    const pss = getPSSConfigFor(pssStation);
+    const feeders = pss?.feeders;
+    if (typeof feeders === 'number') {
+        return Array.from({ length: feeders }, (_, i) => `Feeder-${i + 1}`);
+    }
+    if (Array.isArray(feeders)) {
+        return feeders.map((feeder, index) => {
+            if (typeof feeder === 'string') return feeder;
+            return feeder?.name || feeder?.feederName || `Feeder-${index + 1}`;
+        });
+    }
+    return [];
+}
+
+function applyEditDataToCurrentStep() {
+    if (!pendingEditData) return;
+    const data = pendingEditData;
+
+    if (currentWizardStep === 1) {
+        fillEquipmentFields('ic1', data.ic1);
+        fillEquipmentFields('ic2', data.ic2);
+    } else if (currentWizardStep === 2) {
+        const ptrCount = Math.max(Number(getPSSConfigFor(getActivePSSStation())?.ptrCount) || 0, 6);
+        for (let i = 1; i <= ptrCount; i++) {
+            fillEquipmentFields(`ptr${i}_33kv`, data[`ptr${i}_33kv`]);
+            fillEquipmentFields(`ptr${i}_11kv`, data[`ptr${i}_11kv`]);
+        }
+    } else if (currentWizardStep === 3) {
+        const feederData = data.feeders || {};
+        const keys = Object.keys(feederData);
+        const names = getConfiguredFeederNames(getActivePSSStation());
+        const count = Math.max(keys.length, names.length);
+        for (let i = 0; i < count; i++) {
+            const name = names[i];
+            const key = name && keys.find(k => k.toLowerCase() === String(name).toLowerCase());
+            const feeder = feederData[key] || feederData[keys[i]] || Object.values(feederData)[i];
+            if (!feeder) continue;
+            setFormValue(`feeder_${i}_ptr`, feeder.ptrNo);
+            setFormValue(`feeder_${i}_max_voltage`, feeder.maxVoltage);
+            setFormValue(`feeder_${i}_max_voltage_time`, feeder.maxVoltageTime);
+            setFormValue(`feeder_${i}_min_voltage`, feeder.minVoltage);
+            setFormValue(`feeder_${i}_min_voltage_time`, feeder.minVoltageTime);
+            setFormValue(`feeder_${i}_max_load`, feeder.maxLoad);
+            setFormValue(`feeder_${i}_max_load_time`, feeder.maxLoadTime);
+            setFormValue(`feeder_${i}_min_load`, feeder.minLoad);
+            setFormValue(`feeder_${i}_min_load_time`, feeder.minLoadTime);
+        }
+    } else if (currentWizardStep === 4) {
+        fillEquipmentFields('station_transformer', data.stationTransformer);
+        fillEquipmentFields('charger', data.charger);
+        const ptr = data.charger?.ptrNo || data.charger?.ptr;
+        const select = document.getElementById('charger_ptr');
+        if (select && ptr) {
+            if (!select.querySelector(`option[value="${ptr}"]`)) {
+                const option = document.createElement('option');
+                option.value = ptr;
+                option.textContent = `PTR ${ptr}`;
+                select.appendChild(option);
+            }
+            select.value = ptr;
+        }
+    }
+}
+
+// ============================================
 // DATA SUBMISSION
 // ============================================
 
@@ -1885,7 +2038,7 @@ async function submitLoadingData() {
     try {
         const staffName = document.getElementById('selectedStaffMember').value;
         const date = document.getElementById('formDate').value;
-        const pssStation = appState.currentUser.pssStation;
+        const pssStation = pendingEditData?.pssStation || document.getElementById('formPSSStation').value || getActivePSSStation();
         
         if (!staffName) {
             alert('❌ Please select a staff member');
@@ -1893,9 +2046,36 @@ async function submitLoadingData() {
         }
         
         if (!date) {
-            alert('❌ Please select a date');
+            alert('Please select a date');
             document.getElementById('formDate').focus();
             return;
+        }
+
+        const isoDate = normalizeDateValue(date);
+        if (!editingSubmissionId) {
+            try {
+                const sameDaySnap = await db.collection('daily_entries')
+                    .where('date', '==', isoDate)
+                    .get();
+                const sameStation = String(pssStation || '').trim().toLowerCase();
+                const duplicate = sameDaySnap.docs
+                    .map(doc => ({ id: doc.id, ...doc.data() }))
+                    .find(entry =>
+                        String(entry.pssStation || '').trim().toLowerCase() === sameStation &&
+                        (entry.staffName || '').toLowerCase() === staffName.toLowerCase()
+                    );
+                if (duplicate) {
+                    const updateExisting = confirm(
+                        `${staffName} already submitted data for ${pssStation} on ${formatDate(isoDate)}.\n\n` +
+                        'OK = update that existing entry\nCancel = do not save a duplicate'
+                    );
+                    if (!updateExisting) return;
+                    editingSubmissionId = duplicate.id;
+                    pendingEditData = duplicate;
+                }
+            } catch (error) {
+                console.warn('Duplicate check skipped:', error.message);
+            }
         }
         
         // Get PSS data with validation (case-insensitive)
@@ -2032,12 +2212,13 @@ async function submitLoadingData() {
         console.log('✅ Preparing submission data (validation disabled - all fields optional)');
         
         // Prepare comprehensive submission data (matching 127-column structure)
+        const originalEntry = pendingEditData;
         const submissionData = {
             pssStation: pssStation,
-            phoneNumber: appState.currentUser.phoneNumber,
+            phoneNumber: normalizePhone(originalEntry?.phoneNumber || appState.currentUser.phoneNumber),
             staffName: staffName,
-            date: date,
-            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            date: isoDate,
+            timestamp: originalEntry?.timestamp || firebase.firestore.FieldValue.serverTimestamp(),
             
             // I/C Data (2 sections)
             ic1: ic1Data,
@@ -2058,13 +2239,21 @@ async function submitLoadingData() {
             // Charger
             charger: chargerData,
             
-            submittedBy: appState.currentUser.name || staffName
+            submittedBy: originalEntry?.submittedBy || appState.currentUser.name || staffName,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+            lastEditedBy: appState.currentUser.name || ''
         };
         
         console.log('✅ Submitting comprehensive loading data:', submissionData);
         
-        // Save to Firestore
-        const docRef = await db.collection('daily_entries').add(submissionData);
+        // Update the same document when editing, otherwise create a new one.
+        let docRef;
+        if (editingSubmissionId) {
+            docRef = db.collection('daily_entries').doc(editingSubmissionId);
+            await docRef.update(submissionData);
+        } else {
+            docRef = await db.collection('daily_entries').add(submissionData);
+        }
         console.log('✅ Document saved with ID:', docRef.id);
         
         alert(`✅ Complete Loading Data Submitted Successfully!\n\n📊 Summary:\n• I/C Sections: 2\n• PTR Sections: ${ptrCount}\n• Feeders: ${feedersArray.length}\n• Total Max Load: ${totalMaxLoad.toFixed(2)} AMP\n• Total Min Load: ${totalMinLoad.toFixed(2)} AMP\n• Station Transformer: ✓\n• Charger: ✓`);
@@ -2089,7 +2278,7 @@ async function submitLoadingData() {
 async function updatePSSStats() {
     try {
         const pssStation = appState.currentUser.pssStation;
-        const today = new Date().toISOString().split('T')[0];
+        const today = todayLocalISO();
         
         console.log('📊 Updating PSS stats for:', pssStation);
         
@@ -2103,15 +2292,21 @@ async function updatePSSStats() {
         }
         const ptrCount = pssData?.ptrCount || 2;
         
-        // Query all submissions for this PSS
-        const snapshot = await db.collection('daily_entries')
-            .where('pssStation', '==', pssStation)
-            .get();
+        // Query all submissions for this PSS, including legacy casing variants.
+        const pssVariants = [...new Set([
+            pssStation,
+            pssStation.toUpperCase(),
+            pssStation.toLowerCase()
+        ].filter(Boolean))];
+        const snapshots = await Promise.all(pssVariants.map(value =>
+            db.collection('daily_entries').where('pssStation', '==', value).get()
+        ));
         
-        let submissions = [];
-        snapshot.forEach(doc => {
-            submissions.push({ id: doc.id, ...doc.data() });
+        const submissionMap = new Map();
+        snapshots.forEach(snapshot => {
+            snapshot.forEach(doc => submissionMap.set(doc.id, { id: doc.id, ...doc.data() }));
         });
+        let submissions = sortEntriesDesc(decorateEntries([...submissionMap.values()]));
         
         console.log(`✅ Found ${submissions.length} submissions for PSS stats`);
         
@@ -2125,9 +2320,9 @@ async function updatePSSStats() {
         let todayFeeder1Peak = { load: 0, time: '--:--', voltage: 0 };
         let todayFeeder1Min = { load: 0, time: '--:--', voltage: 0 };
         
-        const todaySubmissions = submissions.filter(s => s.date === today);
+        const todaySubmissions = submissions.filter(s => normalizeDateValue(s.date) === today);
         if (todaySubmissions.length > 0) {
-            const latestToday = todaySubmissions[todaySubmissions.length - 1];
+        const latestToday = todaySubmissions[0];
             if (latestToday.feeders) {
                 const feeder1Key = Object.keys(latestToday.feeders).find(key => 
                     key.toLowerCase().includes('feeder-1') || key.toLowerCase().includes('feeder_1')

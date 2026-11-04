@@ -15,8 +15,18 @@ const adminState = {
     aiInitialized: false,
     users: [],
     pssStations: [],
-    charts: {}
+    charts: {},
+    listenersStarted: false,
+    unsubscribeListeners: []
 };
+
+const ADMIN_REALTIME_LIMIT = 2000;
+
+function getCompleteAdminDataset() {
+    return adminState.aiDataLoaded && adminState.aiSubmissions.length > 0
+        ? adminState.aiSubmissions
+        : adminState.allSubmissions;
+}
 
 // ============================================
 // INITIALIZE ADMIN DASHBOARD
@@ -61,13 +71,16 @@ async function loadAdminDashboard() {
 
 async function loadAdminData() {
     try {
-        // Get current admin info
-        const adminDoc = await db.collection('users')
-            .doc(appState.currentUser.phoneNumber)
+        // Auth uses a query, so the document ID is not guaranteed to be the phone number.
+        const phone = normalizePhone(appState.currentUser.phoneNumber);
+        const adminSnap = await db.collection('users')
+            .where('phoneNumber', '==', phone)
+            .limit(1)
             .get();
+        const adminDoc = adminSnap.docs[0] || null;
         
-        if (adminDoc.exists) {
-            appState.currentUser = { ...appState.currentUser, ...adminDoc.data() };
+        if (adminDoc) {
+            appState.currentUser = { ...appState.currentUser, id: adminDoc.id, ...adminDoc.data() };
             
             // Update header (skip if elements don't exist yet)
             const adminNameEl = document.querySelector('.admin-user-name');
@@ -83,12 +96,21 @@ async function loadAdminData() {
 async function loadUsers() {
     try {
         const usersSnapshot = await db.collection('users').get();
-        adminState.users = usersSnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
+        adminState.users = usersSnapshot.docs.map(doc => {
+            const data = doc.data() || {};
+            const status = data.status || (data.isActive === false ? 'inactive' : 'active');
+            return {
+                id: doc.id,
+                ...data,
+                phoneNumber: normalizePhone(data.phoneNumber || data.phone || doc.id),
+                status,
+                isActive: status === 'active'
+            };
+        });
+        return adminState.users;
     } catch (error) {
         console.error('Error loading users:', error);
+        return adminState.users;
     }
 }
 
@@ -99,22 +121,24 @@ async function loadPSSStations() {
             id: doc.id,
             ...doc.data()
         }));
+        return adminState.pssStations;
     } catch (error) {
         console.error('Error loading PSS stations:', error);
+        return adminState.pssStations;
     }
 }
 
 async function loadSubmissions() {
     try {
         const submissionsSnapshot = await db.collection('daily_entries')
-            .orderBy('timestamp', 'desc')
-            .limit(500)
+            .orderBy('date', 'desc')
+            .limit(ADMIN_REALTIME_LIMIT)
             .get();
         
-        adminState.allSubmissions = submissionsSnapshot.docs.map(doc => ({
+        adminState.allSubmissions = decorateEntries(submissionsSnapshot.docs.map(doc => ({
             id: doc.id,
             ...doc.data()
-        }));
+        })));
         
         adminState.filteredSubmissions = [...adminState.allSubmissions];
     } catch (error) {
@@ -177,6 +201,8 @@ function showAdminWindow(windowName) {
         tabId = 'reportsTab';
     } else if (windowName === 'ai-assistant') {
         tabId = 'ai-assistantTab';
+    } else if (windowName === 'manage') {
+        tabId = 'manageTab';
     } else {
         tabId = windowName + 'Tab';
     }
@@ -206,13 +232,21 @@ function showAdminWindow(windowName) {
                 adminState.aiInitialized = true;
             }
             // Always update data context when AI tab is opened
+            if (!adminState.aiDataLoaded) {
+                setTimeout(() => {
+                    loadAllSubmissionsForAI().catch(err => console.error('AI data load failed:', err));
+                }, 0);
+            }
             if (typeof window.updateDataContext === 'function') {
                 const dataForAI = adminState.aiSubmissions.length > 0 ? adminState.aiSubmissions : adminState.allSubmissions;
                 if (dataForAI && dataForAI.length > 0) {
                     window.updateDataContext(dataForAI);
-                    console.log('🤖 AI data context refreshed:', dataForAI.length, 'records');
+                    console.log('?? AI data context refreshed:', dataForAI.length, 'records');
                 }
             }
+            break;
+        case 'manage':
+            loadManageWindow();
             break;
         case 'settings':
             loadSettingsWindow();
@@ -241,19 +275,20 @@ async function loadOverviewWindow() {
 
 async function updateOverviewStats() {
     try {
-        const today = new Date().toISOString().split('T')[0];
+        const today = todayLocalISO();
+        const overviewData = getCompleteAdminDataset();
         
         // Count unique users
-        const uniqueUsers = new Set(adminState.allSubmissions.map(s => s.phoneNumber)).size;
+        const uniqueUsers = new Set(overviewData.map(s => normalizePhone(s.phoneNumber)).filter(Boolean)).size;
         
         // Count unique PSS stations
-        const uniquePSS = new Set(adminState.allSubmissions.map(s => s.pssStation)).size;
+        const uniquePSS = new Set(overviewData.map(s => s.pssStation).filter(Boolean)).size;
         
         // Total entries
-        const totalEntries = adminState.allSubmissions.length;
+        const totalEntries = overviewData.length;
         
         // Today's entries
-        const todayEntries = adminState.allSubmissions.filter(s => s.date === today).length;
+        const todayEntries = overviewData.filter(s => normalizeDateValue(s.date) === today).length;
         
         // Update stat cards
         const totalUsersEl = document.getElementById('totalUsersCount');
@@ -537,10 +572,11 @@ async function viewSubmission(submissionId) {
 
 async function editSubmission(submissionId) {
     const submission = adminState.allSubmissions.find(s => s.id === submissionId);
-    if (!submission) return;
-    
-    // TODO: Open form with submission data
-    alert(`Editing submission for ${submission.pssStation}\n\nEdit functionality coming soon!`);
+    if (!submission) return alert('Submission not found. Refresh and try again.');
+    if (typeof window.openNewEntryForm !== 'function') {
+        return alert('Entry editor is not available. Reload the page.');
+    }
+    window.openNewEntryForm(submission);
 }
 
 async function deleteSubmission(submissionId) {
@@ -712,11 +748,14 @@ async function loadAnalyticsWindow() {
     if (adminState.allSubmissions.length === 0) {
         await loadAllSubmissions();
     }
+    if (!adminState.aiDataLoaded) {
+        loadAllSubmissionsForAI().catch(err => console.error('AI data load failed:', err));
+    }
     
     // Use new comprehensive dashboard if available
     if (typeof renderAllNewAnalytics === 'function') {
         console.log('? Using NEW dashboard with all sections and KPIs');
-        await renderAllNewAnalytics(adminState.allSubmissions);
+        await renderAllNewAnalytics(getCompleteAdminDataset());
     } else {
         console.warn('📊 New dashboard not loaded, using legacy charts');
         // Fallback to old charts
@@ -2775,34 +2814,31 @@ function renderPSSStationsTable() {
 }
 
 function showAddUserModal() {
-    alert('Add user modal coming soon!');
+    openManagedUserEditor();
 }
 
 function showAddPSSModal() {
-    alert('Add PSS station modal coming soon!');
+    openManagedPSSEditor();
 }
 
-async function editUser(phoneNumber) {
-    alert(`Edit user ${phoneNumber} - Modal coming soon!`);
+async function editUser(phoneOrId) {
+    const user = (adminState.users || []).find(u => u.id === phoneOrId) ||
+        (adminState.users || []).find(u => normalizePhone(u.phoneNumber) === normalizePhone(phoneOrId));
+    if (!user) return alert('User not found. Refresh and try again.');
+    openManagedUserEditor(user.id);
 }
 
-async function deleteUser(phoneNumber) {
-    if (!confirm('Are you sure you want to delete this user?')) return;
-    
-    try {
-        await db.collection('users').doc(phoneNumber).delete();
-        adminState.users = adminState.users.filter(u => u.phoneNumber !== phoneNumber);
-        renderUsersTable();
-        await logAdminAction('delete_user', { phoneNumber });
-        alert('User deleted successfully!');
-    } catch (error) {
-        console.error('Error deleting user:', error);
-        alert('Error deleting user.');
-    }
+async function deleteUser(phoneOrId) {
+    const user = (adminState.users || []).find(u => u.id === phoneOrId) ||
+        (adminState.users || []).find(u => normalizePhone(u.phoneNumber) === normalizePhone(phoneOrId));
+    if (!user) return alert('User not found. Refresh and try again.');
+    return deleteManagedUser(user.id);
 }
 
 async function editPSS(pssId) {
-    alert(`Edit PSS ${pssId} - Modal coming soon!`);
+    const pss = (adminState.pssStations || []).find(p => p.id === pssId);
+    if (!pss) return alert('PSS station not found. Refresh and try again.');
+    openManagedPSSEditor(pss.id);
 }
 
 async function deletePSS(pssId) {
@@ -2811,7 +2847,8 @@ async function deletePSS(pssId) {
     try {
         await db.collection('pss_stations').doc(pssId).delete();
         adminState.pssStations = adminState.pssStations.filter(p => p.id !== pssId);
-        renderPSSStationsTable();
+        if (typeof renderPSSStationsTable === 'function') renderPSSStationsTable();
+        renderManagePSS();
         await logAdminAction('delete_pss', { pssId });
         alert('PSS station deleted successfully!');
     } catch (error) {
@@ -2828,58 +2865,1190 @@ function saveSystemSettings() {
 // REAL-TIME LISTENERS
 // ============================================
 
+function stopAllRealtimeListeners() {
+    (adminState.unsubscribeListeners || []).forEach(unsubscribe => {
+        try { unsubscribe(); } catch (error) { console.warn('Listener cleanup failed:', error); }
+    });
+    adminState.unsubscribeListeners = [];
+    adminState.listenersStarted = false;
+}
+window.stopAllRealtimeListeners = stopAllRealtimeListeners;
+
 function startRealTimeListeners() {
-    // Listen for new submissions
-    db.collection('daily_entries')
-        .orderBy('timestamp', 'desc')
-        .limit(1)
+    if (adminState.listenersStarted) return;
+    adminState.listenersStarted = true;
+
+    const refreshWindow = debounce(() => {
+        if (adminState.currentWindow === 'overview') {
+            if (typeof updateOverviewStats === 'function') updateOverviewStats();
+            if (typeof loadRecentActivity === 'function') loadRecentActivity();
+        } else if (adminState.currentWindow === 'view') {
+            if (typeof renderDataTable === 'function') renderDataTable();
+        } else if (adminState.currentWindow === 'viewAll') {
+            if (typeof filterViewAllData === 'function') filterViewAllData();
+        } else if (adminState.currentWindow === 'analytics') {
+            if (typeof renderAllNewAnalytics === 'function') renderAllNewAnalytics(getCompleteAdminDataset());
+        } else if (adminState.currentWindow === 'manage') {
+            renderManageUsers();
+            renderManagePSS();
+        }
+    }, 350);
+
+    const updateAI = debounce(() => {
+        if (typeof updateDataContext === 'function') {
+            const dataForAI = adminState.aiDataLoaded ? adminState.aiSubmissions : adminState.allSubmissions;
+            updateDataContext(dataForAI);
+        }
+    }, 1000);
+
+    let firstEntriesSnapshot = true;
+
+    const unsubscribeEntries = db.collection('daily_entries')
+        .orderBy('date', 'desc')
+        .limit(ADMIN_REALTIME_LIMIT)
         .onSnapshot(snapshot => {
-            snapshot.docChanges().forEach(change => {
-                if (change.type === 'added') {
-                    const newSubmission = { id: change.doc.id, ...change.doc.data() };
-                    
-                    // Add to beginning of array if not already there
-                    if (!adminState.allSubmissions.find(s => s.id === newSubmission.id)) {
-                        adminState.allSubmissions.unshift(newSubmission);
-                        adminState.filteredSubmissions.unshift(newSubmission);
-                        
-                        // Keep AI dataset updated if loaded
-                        if (adminState.aiDataLoaded && !adminState.aiSubmissions.find(s => s.id === newSubmission.id)) {
-                            adminState.aiSubmissions.unshift(newSubmission);
-                        }
-                        
-                        console.log('? New submission received:', newSubmission.id, 'Total:', adminState.allSubmissions.length);
-                        
-                        // Update chatbot context with latest data
-                        if (typeof updateDataContext === 'function') {
-                            const dataForAI = adminState.aiDataLoaded ? adminState.aiSubmissions : adminState.allSubmissions;
-                            updateDataContext(dataForAI);
-                        }
-                        
-                        // Refresh current window
-                        if (adminState.currentWindow === 'overview') {
-                            updateOverviewStats();
-                            loadRecentActivity();
-                        } else if (adminState.currentWindow === 'view') {
-                            renderDataTable();
-                        } else if (adminState.currentWindow === 'viewAll') {
-                            // Refresh View All table if currently viewing it
-                            if (typeof renderExcelStyleTable === 'function') {
-                                filterViewAllData();
-                            }
-                        } else if (adminState.currentWindow === 'analytics') {
-                            // Refresh analytics if currently viewing
-                            if (typeof renderAllNewAnalytics === 'function') {
-                                renderAllNewAnalytics(adminState.allSubmissions);
-                            }
-                        }
-                        
-                        // Show notification
-                        showNotification('New submission received!', 'success');
+            const previousIds = new Set(adminState.allSubmissions.map(entry => entry.id));
+            adminState.allSubmissions = decorateEntries(snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            })));
+            adminState.filteredSubmissions = [...adminState.allSubmissions];
+
+            if (adminState.aiDataLoaded) {
+                snapshot.docChanges().forEach(change => {
+                    const entry = decorateEntry({ id: change.doc.id, ...change.doc.data() });
+                    const index = adminState.aiSubmissions.findIndex(item => item.id === entry.id);
+                    if (change.type === 'removed') {
+                        if (index >= 0) adminState.aiSubmissions.splice(index, 1);
+                    } else if (index >= 0) {
+                        adminState.aiSubmissions[index] = entry;
+                    } else {
+                        adminState.aiSubmissions.unshift(entry);
                     }
+                });
+                adminState.aiSubmissions = decorateEntries(adminState.aiSubmissions);
+            }
+
+            if (!firstEntriesSnapshot) {
+                const added = snapshot.docChanges().some(change => change.type === 'added');
+                if (added) {
+                    const latest = adminState.allSubmissions[0];
+                    showNotification(`New submission received${latest?.pssStation ? ` from ${latest.pssStation}` : ''}!`, 'success');
                 }
+            }
+            firstEntriesSnapshot = false;
+
+            updateAI();
+            refreshWindow();
+        }, error => {
+            console.error('Realtime entries listener error:', error);
+        });
+    adminState.unsubscribeListeners.push(unsubscribeEntries);
+
+    const unsubscribeUsers = db.collection('users')
+        .onSnapshot(snapshot => {
+            adminState.users = snapshot.docs.map(doc => {
+                const data = doc.data() || {};
+                const status = data.status || (data.isActive === false ? 'inactive' : 'active');
+                return {
+                    id: doc.id,
+                    ...data,
+                    phoneNumber: normalizePhone(data.phoneNumber || data.phone || doc.id),
+                    status,
+                    isActive: status === 'active'
+                };
+            });
+            if (adminState.currentWindow === 'manage') renderManageUsers();
+        }, error => console.error('Realtime users listener error:', error));
+    adminState.unsubscribeListeners.push(unsubscribeUsers);
+
+    const unsubscribePSS = db.collection('pss_stations')
+        .onSnapshot(snapshot => {
+            adminState.pssStations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            if (adminState.currentWindow === 'manage') renderManagePSS();
+        }, error => console.error('Realtime PSS listener error:', error));
+    adminState.unsubscribeListeners.push(unsubscribePSS);
+}
+
+// ============================================
+// MANAGE USERS / PSS / PHONE NUMBERS
+// ============================================
+
+function managedUserName(user) {
+    return user?.name || user?.fullName || user?.staffName || '';
+}
+
+function managedPSSName(pss) {
+    return pss?.name || pss?.stationName || pss?.pssName || pss?.id || '';
+}
+
+function managedUserStatus(user) {
+    if (user?.status) return String(user.status).toLowerCase();
+    return user?.isActive === false ? 'inactive' : 'active';
+}
+
+function getPSSNameOptions(selected) {
+    const names = [
+        ...adminState.pssStations.map(managedPSSName),
+        ...adminState.allSubmissions.map(s => s.pssStation),
+        selected || ''
+    ].filter(Boolean);
+    return [...new Set(names)].sort().map(name =>
+        `<option value="${escapeHtml(name)}"${name === selected ? ' selected' : ''}>${escapeHtml(name)}</option>`
+    ).join('');
+}
+
+async function loadManageWindow() {
+    const usersBody = document.getElementById('manageUsersBody');
+    if (usersBody) usersBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:1.5rem;">Loading users...</td></tr>';
+    try {
+        await Promise.all([loadUsers(), loadPSSStations()]);
+        if (adminState.allSubmissions.length === 0) {
+            await loadAllSubmissions();
+        }
+    } catch (error) {
+        console.error('Error loading manage data:', error);
+    }
+    renderManageUsers();
+    renderManagePSS();
+    const limitEl = document.getElementById('realtimeLimitLabel');
+    if (limitEl) limitEl.textContent = `newest ${ADMIN_REALTIME_LIMIT} entries (AI uses full archive)`;
+}
+
+function renderManageUsers() {
+    const body = document.getElementById('manageUsersBody');
+    if (!body) return;
+    const query = (document.getElementById('manageUserSearch')?.value || '').trim().toLowerCase();
+    const users = (adminState.users || []).filter(user => {
+        if (!query) return true;
+        return [managedUserName(user), user.phoneNumber, user.role, user.pssStation, user.staffType, managedUserStatus(user)]
+            .filter(Boolean).join(' ').toLowerCase().includes(query);
+    });
+
+    const countEl = document.getElementById('managedUsersCount');
+    if (countEl) countEl.textContent = `(${adminState.users.length} total)`;
+
+    if (!users.length) {
+        body.innerHTML = '<div class="empty-list">No users found</div>';
+        return;
+    }
+
+    body.innerHTML = users.map(user => {
+        const status = managedUserStatus(user);
+        const statusColor = status === 'active' ? '#10b981' : '#ef4444';
+        const isAdmin = user.role === 'admin';
+        return `
+            <div class="card-item" id="user-card-${escapeHtml(user.id)}">
+                <div class="card-item-header">
+                    <div>
+                        <div class="card-item-title">${escapeHtml(managedUserName(user) || '-')}</div>
+                        <div class="card-item-sub">${escapeHtml(user.phoneNumber || user.phone || '-')}</div>
+                    </div>
+                    <div class="card-item-badge ${status === 'active' ? 'badge-active' : 'badge-inactive'}">${status === 'active' ? 'Active' : 'Inactive'}</div>
+                </div>
+                <div class="card-item-row">
+                    <span class="card-item-field"><span class="card-item-label">Role</span> ${isAdmin ? '<span style="color:#f59e0b;font-weight:600;">Admin</span>' : 'Staff'}</span>
+                    <span class="card-item-field"><span class="card-item-label">PSS</span> ${escapeHtml(user.pssStation || '-')}</span>
+                    <span class="card-item-field"><span class="card-item-label">Type</span> ${escapeHtml(user.staffType || '-')}</span>
+                </div>
+                <div class="card-item-actions">
+                    <button class="btn-action" data-action="edit-user" data-id="${escapeHtml(user.id)}" style="background:#3b82f6; margin-right:6px;">Edit</button>
+                    <button class="btn-action" data-action="delete-user" data-id="${escapeHtml(user.id)}" style="background:#ef4444;">Delete</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    body.querySelectorAll('button[data-action="edit-user"]').forEach(btn => {
+        btn.addEventListener('click', () => openManagedUserEditor(btn.dataset.id));
+    });
+    body.querySelectorAll('button[data-action="delete-user"]').forEach(btn => {
+        btn.addEventListener('click', () => deleteManagedUser(btn.dataset.id));
+    });
+}
+
+function renderManagePSS() {
+    const body = document.getElementById('managePSSBody');
+    if (!body) return;
+    const list = [...(adminState.pssStations || [])].sort((a, b) => managedPSSName(a).localeCompare(managedPSSName(b)));
+    const countEl = document.getElementById('managedPSSCount');
+    if (countEl) countEl.textContent = `(${list.length} total)`;
+
+    if (!list.length) {
+        body.innerHTML = '<div class="empty-list">No PSS stations found</div>';
+        return;
+    }
+
+    body.innerHTML = list.map(pss => {
+        const feederCount = pss.feederCount || (Array.isArray(pss.feeders) ? pss.feeders.length : Number(pss.feeders) || 0);
+        const rawLinemen = pss.linemen || pss.lineman || [];
+        const rawHelpers = pss.helpers || pss.helper || [];
+        const linemen = Array.isArray(rawLinemen) ? rawLinemen.join(', ') : String(rawLinemen || '');
+        const helpers = Array.isArray(rawHelpers) ? rawHelpers.join(', ') : String(rawHelpers || '');
+        const circleDiv = [pss.circle, pss.division].filter(Boolean).join(' / ') || '-';
+        return `
+            <div class="card-item" id="pss-card-${escapeHtml(pss.id)}">
+                <div class="card-item-header">
+                    <div>
+                        <div class="card-item-title">${escapeHtml(managedPSSName(pss) || pss.id)}</div>
+                        <div class="card-item-sub">${escapeHtml(circleDiv)}</div>
+                    </div>
+                    <div class="card-item-fields">
+                        <span class="card-item-field"><span class="card-item-label">PTR</span> ${Number(pss.ptrCount || pss.ptr || 0) || '-'}</span>
+                        <span class="card-item-field"><span class="card-item-label">Feeders</span> ${feederCount || '-'}</span>
+                    </div>
+                </div>
+                <div class="card-item-row">
+                    <span class="card-item-field"><span class="card-item-label">Linemen</span> ${escapeHtml(linemen || '-')}</span>
+                    <span class="card-item-field"><span class="card-item-label">Helpers</span> ${escapeHtml(helpers || '-')}</span>
+                </div>
+                <div class="card-item-actions">
+                    <button class="btn-action" data-action="edit-pss" data-id="${escapeHtml(pss.id)}" style="background:#3b82f6; margin-right:6px;">Edit</button>
+                    <button class="btn-action" data-action="delete-pss" data-id="${escapeHtml(pss.id)}" style="background:#ef4444;">Delete</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    body.querySelectorAll('button[data-action="edit-pss"]').forEach(btn => {
+        btn.addEventListener('click', () => openManagedPSSEditor(btn.dataset.id));
+    });
+    body.querySelectorAll('button[data-action="delete-pss"]').forEach(btn => {
+        btn.addEventListener('click', () => deleteManagedPSS(btn.dataset.id));
+    });
+}
+
+function openManageModal(title, bodyHtml) {
+    closeManageModal();
+    const overlay = document.createElement('div');
+    overlay.id = 'manageEditModal';
+    overlay.className = 'modal-overlay';
+    overlay.style.display = 'flex';
+    overlay.innerHTML = `
+        <div class="modal-container" style="max-width:720px; width:95%;">
+            <div class="modal-header">
+                <h2>${escapeHtml(title)}</h2>
+                <button class="modal-close" onclick="closeManageModal()">&times;</button>
+            </div>
+            <div class="modal-body" style="padding:24px; max-height:72vh; overflow:auto;">
+                ${bodyHtml}
+            </div>
+        </div>`;
+    overlay.addEventListener('click', event => {
+        if (event.target === overlay) closeManageModal();
+    });
+    document.body.appendChild(overlay);
+}
+
+function closeManageModal() {
+    const existing = document.getElementById('manageEditModal');
+    if (existing) existing.remove();
+}
+
+function openManagedUserEditor(userId) {
+    const user = (adminState.users || []).find(u => u.id === userId);
+    window.__editingUserId = user?.id || null;
+    const status = managedUserStatus(user);
+    const bodyHtml = `
+        <div class="form-group">
+            <label>Full Name *</label>
+            <input type="text" id="muName" class="form-control" value="${escapeHtml(managedUserName(user))}">
+        </div>
+        <div class="form-group">
+            <label>Phone Number * (10 digits)</label>
+            <input type="tel" id="muPhone" class="form-control" maxlength="10" value="${escapeHtml(user?.phoneNumber || user?.phone || '')}">
+        </div>
+        <div class="form-group">
+            <label>Role</label>
+            <select id="muRole" class="form-control">
+                <option value="user"${user?.role === 'user' ? ' selected' : ''}>Staff / User</option>
+                <option value="admin"${user?.role === 'admin' ? ' selected' : ''}>Admin</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>PSS Station</label>
+            <select id="muPSS" class="form-control">
+                <option value="">-- Not assigned --</option>
+                ${getPSSNameOptions(user?.pssStation || '')}
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Staff Type</label>
+            <select id="muType" class="form-control">
+                <option value=""${!user?.staffType ? ' selected' : ''}>--</option>
+                <option value="lineman"${user?.staffType === 'lineman' ? ' selected' : ''}>Lineman</option>
+                <option value="helper"${user?.staffType === 'helper' ? ' selected' : ''}>Helper</option>
+                <option value="other"${user?.staffType === 'other' ? ' selected' : ''}>Other</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Status</label>
+            <select id="muStatus" class="form-control">
+                <option value="active"${status === 'active' ? ' selected' : ''}>Active (can log in)</option>
+                <option value="inactive"${status !== 'active' ? ' selected' : ''}>Inactive (blocked)</option>
+            </select>
+        </div>
+        <label style="display:flex; gap:8px; align-items:flex-start; font-size:13px; color:rgba(255,255,255,0.75);">
+            <input type="checkbox" id="muCascade" checked style="margin-top:3px;">
+            If the phone number changed, also update every daily entry that used the old number.
+        </label>
+        <div style="display:flex; gap:1rem; margin-top:1.5rem;">
+            <button class="btn-primary" id="manageUserSaveBtn" onclick="saveManagedUser()" style="flex:1;">Save User</button>
+            <button class="btn-secondary" onclick="closeManageModal()" style="flex:1;">Cancel</button>
+        </div>`;
+    openManageModal(user ? 'Edit User' : 'Add User', bodyHtml);
+}
+
+async function saveManagedUser() {
+    const id = window.__editingUserId || null;
+    const user = id ? (adminState.users || []).find(u => u.id === id) : null;
+    const name = (document.getElementById('muName')?.value || '').trim();
+    const phone = normalizePhone(document.getElementById('muPhone')?.value);
+    const role = document.getElementById('muRole')?.value || 'user';
+    const pssStation = (document.getElementById('muPSS')?.value || '').trim();
+    const staffType = (document.getElementById('muType')?.value || '').trim();
+    const status = document.getElementById('muStatus')?.value === 'inactive' ? 'inactive' : 'active';
+    const cascade = !!document.getElementById('muCascade')?.checked;
+    const saveBtn = document.getElementById('manageUserSaveBtn');
+
+    if (!name) return alert('Please enter the full name.');
+    if (!isValidPhone(phone)) return alert('Enter a valid 10-digit Indian mobile number.');
+    if (role !== 'admin' && !pssStation) return alert('Please select the PSS station for this staff member.');
+
+    const oldPhone = normalizePhone(user?.phoneNumber || user?.phone || '');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    try {
+        const duplicate = (adminState.users || []).find(user => user.id !== id && normalizePhone(user.phoneNumber || user.phone) === phone);
+        if (duplicate) throw new Error(`Phone ${phone} is already used by ${managedUserName(duplicate) || 'another user'}.`);
+
+        const payload = {
+            name,
+            phoneNumber: phone,
+            role,
+            pssStation: role === 'admin' ? pssStation : pssStation,
+            staffType,
+            status,
+            isActive: status === 'active',
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        if (id) {
+            await db.collection('users').doc(id).update(payload);
+        } else {
+            await db.collection('users').add({
+                ...payload,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+        }
+
+        let cascadeResult = { users: 0, entries: 0 };
+        if (cascade && oldPhone && oldPhone !== phone) {
+            cascadeResult = await updatePhoneEverywhere(oldPhone, phone, { includeUsers: false });
+            const stored = JSON.parse(localStorage.getItem('pssUser') || 'null');
+            if (stored && normalizePhone(stored.phoneNumber) === oldPhone) {
+                stored.phoneNumber = phone;
+                localStorage.setItem('pssUser', JSON.stringify(stored));
+                if (appState.currentUser) appState.currentUser.phoneNumber = phone;
+            }
+        }
+
+        await logAdminAction(id ? 'UPDATE_USER' : 'CREATE_USER', {
+            name, phone, role, pssStation, status, cascadeEntries: cascadeResult.entries
+        });
+        await loadUsers();
+        renderManageUsers();
+        closeManageModal();
+        alert(`User saved.${cascadeResult.entries ? ` Updated ${cascadeResult.entries} daily entries.` : ''}`);
+    } catch (error) {
+        console.error('Save user error:', error);
+        alert('Could not save user: ' + error.message);
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save User';
+    }
+}
+
+async function deleteManagedUser(userId) {
+    if (!userId) return;
+    const user = (adminState.users || []).find(u => u.id === userId);
+    if (!confirm(`Delete ${managedUserName(user) || 'this user'}?\n\nTheir daily entries will be kept.`)) return;
+    try {
+        await db.collection('users').doc(userId).delete();
+        await logAdminAction('DELETE_USER', { name: managedUserName(user), phone: user?.phoneNumber });
+        await loadUsers();
+        renderManageUsers();
+    } catch (error) {
+        alert('Could not delete user: ' + error.message);
+    }
+}
+
+function feedersToText(pss) {
+    const feeders = pss?.feeders;
+    if (typeof feeders === 'number' && feeders > 0) {
+        return Array.from({ length: feeders }, (_, index) => `Feeder-${index + 1} | ${index + 1}`).join('\n');
+    }
+    if (!Array.isArray(feeders)) return '';
+    return feeders.map(feeder => {
+        if (typeof feeder === 'string') return feeder;
+        return `${feeder.name || feeder.feederName || feeder.id || ''}${feeder.ptrNo ? ` | ${feeder.ptrNo}` : ''}`.trim();
+    }).filter(Boolean).join('\n');
+}
+
+function parseFeedersText(text, existingFeeders) {
+    const existing = Array.isArray(existingFeeders)
+        ? existingFeeders.filter(feeder => feeder && typeof feeder === 'object')
+        : [];
+    return String(text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).map((line, index) => {
+        const parts = line.split('|').map(p => p.trim());
+        const name = parts[0];
+        if (!name) return null;
+        const ptrNo = parseInt(parts[1], 10) || (index + 1);
+        const prior = existing.find(f => (f.name || f.feederName) === name) || existing[index] || {};
+        return {
+            ...prior,
+            id: prior.id || `feeder_${index + 1}`,
+            name,
+            ptrNo
+        };
+    }).filter(Boolean);
+}
+
+function splitNames(value) {
+    return String(value || '').split(/[\n,]+/).map(v => v.trim()).filter(Boolean);
+}
+
+function escapeHtmlAttr(value) {
+    return String(value || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function openManagedPSSEditor(pssId) {
+    const pss = (adminState.pssStations || []).find(p => p.id === pssId);
+    window.__editingPSSId = pss?.id || null;
+    window.__editingPSSName = managedPSSName(pss);
+
+    const existingName = String(managedPSSName(pss) || '').trim();
+    const existingCircle = String(pss?.circle || '').trim();
+    const existingDivision = String(pss?.division || '').trim();
+    const existingPtrCount = Number(pss?.ptrCount || pss?.ptr || 0);
+
+    const existingFeeders = Array.isArray(pss?.feeders) ? pss.feeders : [];
+    const existingLinemen = Array.isArray(pss?.linemen || pss?.lineman) ? (pss.linemen || pss.lineman) : [];
+    const existingHelpers = Array.isArray(pss?.helpers || pss?.helper) ? (pss.helpers || pss.helper) : [];
+
+    const feederCardsHtml = existingFeeders.map((f, idx) => {
+        const fname = String(f.name || f.feederName || `Feeder-${idx + 1}`).trim();
+        const fptr = f.ptrNo !== undefined ? f.ptrNo : (idx + 1);
+        return `
+            <div class="card-item" id="feeder-card-${idx}">
+                <div class="card-item-header">
+                    <span class="card-item-badge">Feeder ${idx + 1}</span>
+                    <button type="button" class="card-remove" onclick="removeCardItem('feeder-card-${idx}')" title="Remove feeder">×</button>
+                </div>
+                <div class="card-item-row">
+                    <input type="text" class="card-input" id="feeder-name-${idx}" value="${escapeHtmlAttr(fname)}" placeholder="Feeder name">
+                    <input type="number" class="card-input card-input-sm" id="feeder-ptr-${idx}" value="${fptr}" min="1" max="10" placeholder="PTR">
+                </div>
+            </div>
+        `;
+    }).join('') || '<div class="empty-list">No feeders added. Click "Add Feeder" to add one.</div>';
+
+    const linemenCardsHtml = existingLinemen.map((name, idx) => {
+        const n = String(name).trim();
+        return `
+            <div class="card-item" id="lineman-card-${idx}">
+                <div class="card-item-header">
+                    <span class="card-item-badge">Lineman ${idx + 1}</span>
+                    <button type="button" class="card-remove" onclick="removeCardItem('lineman-card-${idx}')" title="Remove lineman">×</button>
+                </div>
+                <div class="card-item-row">
+                    <input type="text" class="card-input" id="lineman-name-${idx}" value="${escapeHtmlAttr(n)}" placeholder="Lineman name">
+                </div>
+            </div>
+        `;
+    }).join('') || '<div class="empty-list">No linemen added. Click "Add Lineman" to add one.</div>';
+
+    const helpersCardsHtml = existingHelpers.map((name, idx) => {
+        const n = String(name).trim();
+        return `
+            <div class="card-item" id="helper-card-${idx}">
+                <div class="card-item-header">
+                    <span class="card-item-badge">Helper ${idx + 1}</span>
+                    <button type="button" class="card-remove" onclick="removeCardItem('helper-card-${idx}')" title="Remove helper">×</button>
+                </div>
+                <div class="card-item-row">
+                    <input type="text" class="card-input" id="helper-name-${idx}" value="${escapeHtmlAttr(n)}" placeholder="Helper name">
+                </div>
+            </div>
+        `;
+    }).join('') || '<div class="empty-list">No helpers added. Click "Add Helper" to add one.</div>';
+
+    const bodyHtml = `
+        <div class="pss-editor">
+            <div class="form-group">
+                <label>PSS Station Name *</label>
+                <input type="text" id="mpName" class="form-control" value="${escapeHtmlAttr(existingName)}">
+                <p style="font-size:11px; color:rgba(255,255,255,0.55); margin-top:4px;">Renaming also updates users and daily entries.</p>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1rem;">
+                <div class="form-group">
+                    <label>Circle</label>
+                    <input type="text" id="mpCircle" class="form-control" value="${escapeHtmlAttr(existingCircle)}">
+                </div>
+                <div class="form-group">
+                    <label>Division</label>
+                    <input type="text" id="mpDivision" class="form-control" value="${escapeHtmlAttr(existingDivision)}">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Number of PTRs</label>
+                <input type="number" id="mpPtrCount" class="form-control" min="0" max="10" value="${existingPtrCount}">
+            </div>
+
+            <div class="card-section">
+                <div class="card-section-header">
+                    <label>Feeders</label>
+                    <button type="button" class="btn-add-card" onclick="addCardItem('feeders', 'feeder')">+ Add Feeder</button>
+                </div>
+                <div id="feeders-container">${feederCardsHtml}</div>
+            </div>
+
+            <div class="card-section">
+                <div class="card-section-header">
+                    <label>Linemen</label>
+                    <button type="button" class="btn-add-card" onclick="addCardItem('linemen', 'lineman')">+ Add Lineman</button>
+                </div>
+                <div id="linemen-container">${linemenCardsHtml}</div>
+            </div>
+
+            <div class="card-section">
+                <div class="card-section-header">
+                    <label>Helpers</label>
+                    <button type="button" class="btn-add-card" onclick="addCardItem('helpers', 'helper')">+ Add Helper</button>
+                </div>
+                <div id="helpers-container">${helpersCardsHtml}</div>
+            </div>
+        </div>
+        <div style="display:flex; gap:1rem; margin-top:1.5rem;">
+            <button class="btn-primary" id="managePSSSaveBtn" onclick="saveManagedPSS()" style="flex:1;">Save PSS Station</button>
+            <button class="btn-secondary" onclick="closeManageModal()" style="flex:1;">Cancel</button>
+        </div>`;
+    openManageModal(pss ? 'Edit PSS Station' : 'Add PSS Station', bodyHtml);
+}
+
+window.addCardItem = function addCardItem(containerType, itemType) {
+    const container = document.getElementById(`${containerType}-container`);
+    if (!container) return;
+    const existing = container.querySelectorAll('.card-item').length;
+    const idx = existing;
+    let html = '';
+    if (itemType === 'feeder') {
+        html = `
+            <div class="card-item" id="feeder-card-${idx}">
+                <div class="card-item-header">
+                    <span class="card-item-badge">Feeder ${idx + 1}</span>
+                    <button type="button" class="card-remove" onclick="removeCardItem('feeder-card-${idx}')" title="Remove feeder">×</button>
+                </div>
+                <div class="card-item-row">
+                    <input type="text" class="card-input" id="feeder-name-${idx}" value="" placeholder="Feeder name">
+                    <input type="number" class="card-input card-input-sm" id="feeder-ptr-${idx}" value="${idx + 1}" min="1" max="10" placeholder="PTR">
+                </div>
+            </div>
+        `;
+    } else if (itemType === 'lineman') {
+        html = `
+            <div class="card-item" id="lineman-card-${idx}">
+                <div class="card-item-header">
+                    <span class="card-item-badge">Lineman ${idx + 1}</span>
+                    <button type="button" class="card-remove" onclick="removeCardItem('lineman-card-${idx}')" title="Remove lineman">×</button>
+                </div>
+                <div class="card-item-row">
+                    <input type="text" class="card-input" id="lineman-name-${idx}" value="" placeholder="Lineman name">
+                </div>
+            </div>
+        `;
+    } else if (itemType === 'helper') {
+        html = `
+            <div class="card-item" id="helper-card-${idx}">
+                <div class="card-item-header">
+                    <span class="card-item-badge">Helper ${idx + 1}</span>
+                    <button type="button" class="card-remove" onclick="removeCardItem('helper-card-${idx}')" title="Remove helper">×</button>
+                </div>
+                <div class="card-item-row">
+                    <input type="text" class="card-input" id="helper-name-${idx}" value="" placeholder="Helper name">
+                </div>
+            </div>
+        `;
+    }
+    const empty = container.querySelector('.empty-list');
+    if (empty) empty.remove();
+    container.insertAdjacentHTML('beforeend', html);
+};
+
+window.removeCardItem = function removeCardItem(cardId) {
+    const el = document.getElementById(cardId);
+    if (el) el.remove();
+    const container = el ? el.parentElement : null;
+    if (container && container.querySelectorAll('.card-item').length === 0) {
+        container.insertAdjacentHTML('beforeend', '<div class="empty-list">No items added. Click the add button above to add one.</div>');
+    }
+};
+
+async function saveManagedPSS() {
+    const id = window.__editingPSSId || null;
+    const pss = id ? (adminState.pssStations || []).find(p => p.id === id) : null;
+    const oldName = window.__editingPSSName || managedPSSName(pss);
+    const name = (document.getElementById('mpName')?.value || '').trim();
+    const circle = (document.getElementById('mpCircle')?.value || '').trim();
+    const division = (document.getElementById('mpDivision')?.value || '').trim();
+    const ptrCount = parseInt(document.getElementById('mpPtrCount')?.value, 10) || 0;
+
+    // Collect feeders from card inputs
+    const feeders = [];
+    let feederIdx = 0;
+    while (document.getElementById(`feeder-name-${feederIdx}`)) {
+        const fname = (document.getElementById(`feeder-name-${feederIdx}`)?.value || '').trim();
+        const fptr = parseInt(document.getElementById(`feeder-ptr-${feederIdx}`)?.value, 10) || (feederIdx + 1);
+        if (fname) {
+            feeders.push({
+                id: `feeder_${feederIdx + 1}`,
+                name: fname,
+                feederName: fname,
+                ptrNo: fptr
+            });
+        }
+        feederIdx++;
+    }
+
+    // Collect linemen from card inputs
+    const linemen = [];
+    let lIdx = 0;
+    while (document.getElementById(`lineman-name-${lIdx}`)) {
+        const lname = (document.getElementById(`lineman-name-${lIdx}`)?.value || '').trim();
+        if (lname) linemen.push(lname);
+        lIdx++;
+    }
+
+    // Collect helpers from card inputs
+    const helpers = [];
+    let hIdx = 0;
+    while (document.getElementById(`helper-name-${hIdx}`)) {
+        const hname = (document.getElementById(`helper-name-${hIdx}`)?.value || '').trim();
+        if (hname) helpers.push(hname);
+        hIdx++;
+    }
+
+    const saveBtn = document.getElementById('managePSSSaveBtn');
+
+    if (!name) return alert('Please enter the PSS station name.');
+
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Saving...';
+    try {
+        const duplicate = (adminState.pssStations || []).find(p => p.id !== id && managedPSSName(p).toLowerCase() === name.toLowerCase());
+        if (duplicate) throw new Error(`A PSS station named "${name}" already exists.`);
+
+        const newDocId = name.toUpperCase();
+        const existingDoc = await db.collection('pss_stations').doc(newDocId).get();
+        if (id && existingDoc.exists && existingDoc.id !== id) {
+            throw new Error(`Document ID ${newDocId} is already used by another PSS.`);
+        }
+
+        const payload = {
+            name,
+            circle,
+            division,
+            ptrCount,
+            feederCount: feeders.length,
+            feeders,
+            linemen,
+            lineman: linemen,
+            helpers,
+            helper: helpers,
+            isActive: true,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+
+        await db.collection('pss_stations').doc(newDocId).set(payload, { merge: true });
+
+        const renamed = !!id && oldName && oldName !== name;
+        if (renamed) {
+            await cascadePSSRename(oldName, name, id);
+            if (newDocId !== id) {
+                await db.collection('pss_stations').doc(id).delete();
+            }
+        }
+
+        await logAdminAction(id ? 'UPDATE_PSS' : 'CREATE_PSS', { name, oldName, feeders: feeders.length });
+        await loadPSSStations();
+        if (renamed) await loadUsers();
+        renderManagePSS();
+        renderManageUsers();
+        closeManageModal();
+        alert(renamed ? `PSS saved and renamed from "${oldName}" to "${name}".` : 'PSS station saved.');
+    } catch (error) {
+        console.error('Save PSS error:', error);
+        alert('Could not save PSS station: ' + error.message);
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save PSS Station';
+    }
+}
+
+async function cascadePSSRename(oldName, newName, skipPSSId) {
+    let usersUpdated = 0;
+    let entriesUpdated = 0;
+    const variants = [...new Set([
+        oldName,
+        oldName.toUpperCase(),
+        oldName.toLowerCase()
+    ].filter(name => name && name !== newName))];
+
+    const collectMatches = async (collectionName, field) => {
+        const snapshots = await Promise.all(variants.map(value =>
+            db.collection(collectionName).where(field, '==', value).get()
+        ));
+        const docs = new Map();
+        snapshots.forEach(snapshot => snapshot.docs.forEach(doc => docs.set(doc.id, doc)));
+        return [...docs.values()];
+    };
+
+    const userDocs = await collectMatches('users', 'pssStation');
+    for (let i = 0; i < userDocs.length; i += 400) {
+        const batch = db.batch();
+        userDocs.slice(i, i + 400).forEach(doc => batch.update(doc.ref, { pssStation: newName }));
+        await batch.commit();
+        usersUpdated += Math.min(400, userDocs.length - i);
+    }
+
+    const entryDocs = await collectMatches('daily_entries', 'pssStation');
+    for (let i = 0; i < entryDocs.length; i += 400) {
+        const batch = db.batch();
+        entryDocs.slice(i, i + 400).forEach(doc => {
+            batch.update(doc.ref, {
+                pssStation: newName,
+                updatedAt: firebase.firestore.FieldValue.serverTimestamp()
             });
         });
+        await batch.commit();
+        entriesUpdated += Math.min(400, entryDocs.length - i);
+    }
+
+    const sameStation = value => String(value || '').trim().toLowerCase() === String(oldName || '').trim().toLowerCase();
+    adminState.allSubmissions.forEach(entry => {
+        if (sameStation(entry.pssStation)) entry.pssStation = newName;
+    });
+    if (adminState.aiDataLoaded) {
+        adminState.aiSubmissions.forEach(entry => {
+            if (sameStation(entry.pssStation)) entry.pssStation = newName;
+        });
+    }
+    adminState.users.forEach(user => {
+        if (sameStation(user.pssStation)) user.pssStation = newName;
+    });
+    return { usersUpdated, entriesUpdated };
+}
+
+async function deleteManagedPSS(pssId) {
+    if (!pssId) return;
+    const pss = (adminState.pssStations || []).find(p => p.id === pssId);
+    const name = managedPSSName(pss) || pssId;
+    const entryCount = adminState.allSubmissions.filter(e => e.pssStation === name).length;
+    if (!confirm(`Delete PSS station "${name}"?\n\n${entryCount} recent entries use this station. Those entries will NOT be deleted.`)) return;
+    try {
+        await db.collection('pss_stations').doc(pssId).delete();
+        await logAdminAction('DELETE_PSS', { name });
+        await loadPSSStations();
+        renderManagePSS();
+    } catch (error) {
+        alert('Could not delete PSS station: ' + error.message);
+    }
+}
+
+async function updatePhoneEverywhere(oldPhone, newPhone, options = {}) {
+    const includeUsers = options.includeUsers !== false;
+    let usersUpdated = 0;
+    let entriesUpdated = 0;
+
+    const collectMatches = async collectionName => {
+        const [primary, legacy] = await Promise.all([
+            db.collection(collectionName).where('phoneNumber', '==', oldPhone).get(),
+            db.collection(collectionName).where('phone', '==', oldPhone).get()
+        ]);
+        const docs = new Map();
+        primary.docs.forEach(doc => docs.set(doc.id, doc));
+        legacy.docs.forEach(doc => docs.set(doc.id, doc));
+        return [...docs.values()];
+    };
+
+    const applyUpdates = async (docs, counters) => {
+        for (let i = 0; i < docs.length; i += 400) {
+            const batch = db.batch();
+            docs.slice(i, i + 400).forEach(doc => {
+                const existing = doc.data() || {};
+                const update = {
+                    phoneNumber: newPhone,
+                    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+                };
+                if (existing.phone !== undefined) update.phone = newPhone;
+                batch.update(doc.ref, update);
+            });
+            await batch.commit();
+            counters.count += Math.min(400, docs.length - i);
+        }
+    };
+
+    if (includeUsers) {
+        const userCount = { count: 0 };
+        await applyUpdates(await collectMatches('users'), userCount);
+        usersUpdated = userCount.count;
+    }
+
+    const entryCount = { count: 0 };
+    await applyUpdates(await collectMatches('daily_entries'), entryCount);
+    entriesUpdated = entryCount.count;
+
+    adminState.users.forEach(user => {
+        if (normalizePhone(user.phoneNumber || user.phone) === oldPhone) {
+            user.phoneNumber = newPhone;
+            if (user.phone !== undefined) user.phone = newPhone;
+        }
+    });
+    adminState.allSubmissions.forEach(entry => {
+        if (normalizePhone(entry.phoneNumber || entry.phone) === oldPhone) {
+            entry.phoneNumber = newPhone;
+            if (entry.phone !== undefined) entry.phone = newPhone;
+        }
+    });
+    return { users: usersUpdated, entries: entriesUpdated };
+}
+
+function parsePhoneMigrationInput() {
+    const raw = document.getElementById('phoneMigrationInput')?.value || '';
+    const changes = [];
+    const errors = [];
+    const seen = new Set();
+    raw.split(/\r?\n/).forEach((line, index) => {
+        const trimmed = line.trim();
+        if (!trimmed) return;
+        const match = trimmed.match(/^([+\d\s\-]+?)\s*(?:,|->|=>|:)\s*([+\d\s\-]+)$/);
+        if (!match) {
+            errors.push(`Line ${index + 1}: use old,new`);
+            return;
+        }
+        const oldPhone = normalizePhone(match[1]);
+        const newPhone = normalizePhone(match[2]);
+        if (oldPhone.length < 6 || oldPhone.length > 13) {
+            errors.push(`Line ${index + 1}: old number must contain 6-13 digits`);
+            return;
+        }
+        if (!isValidPhone(newPhone)) {
+            errors.push(`Line ${index + 1}: new number must be a valid 10-digit mobile`);
+            return;
+        }
+        if (oldPhone === newPhone) {
+            errors.push(`Line ${index + 1}: old and new are identical`);
+            return;
+        }
+        if (seen.has(oldPhone)) {
+            errors.push(`Line ${index + 1}: duplicate old number ${oldPhone}`);
+            return;
+        }
+        seen.add(oldPhone);
+        changes.push({ oldPhone, newPhone });
+    });
+    return { changes, errors };
+}
+
+async function previewPhoneMigration() {
+    const preview = document.getElementById('phoneMigrationPreview');
+    const { changes, errors } = parsePhoneMigrationInput();
+    if (errors.length) {
+        preview.innerHTML = `<span style="color:#f87171;">${errors.map(escapeHtml).join('<br>')}</span>`;
+        return;
+    }
+    if (!changes.length) {
+        preview.innerHTML = '<span style="color:#fbbf24;">Enter at least one old,new pair.</span>';
+        return;
+    }
+    preview.innerHTML = 'Checking users and entries...';
+    try {
+        const rows = [];
+        for (const change of changes) {
+            const [userPrimary, userLegacy, entryPrimary, entryLegacy] = await Promise.all([
+                db.collection('users').where('phoneNumber', '==', change.oldPhone).get(),
+                db.collection('users').where('phone', '==', change.oldPhone).get(),
+                db.collection('daily_entries').where('phoneNumber', '==', change.oldPhone).get(),
+                db.collection('daily_entries').where('phone', '==', change.oldPhone).get()
+            ]);
+            const userIds = new Set([...userPrimary.docs.map(d => d.id), ...userLegacy.docs.map(d => d.id)]);
+            const entryIds = new Set([...entryPrimary.docs.map(d => d.id), ...entryLegacy.docs.map(d => d.id)]);
+            rows.push({ ...change, users: userIds.size, entries: entryIds.size });
+        }
+        window.__phoneMigrationChanges = rows;
+        preview.innerHTML = `<table class="data-table" style="font-size:13px;">
+            <thead><tr><th>Old</th><th>New</th><th>Users</th><th>Entries</th></tr></thead>
+            <tbody>${rows.map(r => `<tr><td style="font-family:monospace;">${r.oldPhone}</td><td style="font-family:monospace;">${r.newPhone}</td><td>${r.users}</td><td>${r.entries}</td></tr>`).join('')}</tbody>
+        </table>`;
+    } catch (error) {
+        preview.innerHTML = `<span style="color:#f87171;">${escapeHtml(error.message)}</span>`;
+    }
+}
+
+async function applyPhoneMigration() {
+    const { changes, errors } = parsePhoneMigrationInput();
+    if (errors.length) return alert(errors.join('\n'));
+    if (!changes.length) return alert('Enter at least one old,new pair.');
+    if (!confirm(`Apply ${changes.length} phone number change(s)?\n\nThis updates user accounts and all matching daily entries.`)) return;
+
+    const preview = document.getElementById('phoneMigrationPreview');
+    preview.innerHTML = 'Applying changes...';
+    let totalUsers = 0;
+    let totalEntries = 0;
+    const failures = [];
+    for (const change of changes) {
+        try {
+            const result = await updatePhoneEverywhere(change.oldPhone, change.newPhone);
+            totalUsers += result.users;
+            totalEntries += result.entries;
+            await logAdminAction('MIGRATE_PHONE', change);
+        } catch (error) {
+            failures.push(`${change.oldPhone} -> ${change.newPhone}: ${error.message}`);
+        }
+    }
+    await loadUsers();
+    renderManageUsers();
+    preview.innerHTML = `<span style="color:#10b981;">Updated ${totalUsers} users and ${totalEntries} entries.</span>${failures.length ? `<br><span style="color:#f87171;">${failures.map(escapeHtml).join('<br>')}</span>` : ''}`;
+}
+
+const PSS_PHONE_MAPPING = {
+    SANKARA: '7682807507',
+    COLLEGE: '7682807508',
+    KARAMDIHI: '7682807509',
+    SUBDEGA: '7682807510',
+    BALISANKARA: '7682807511',
+    MAJHAPADA: '7682807506',
+    SARGIPALI: '7682807516',
+    TUMAPALI: '7682807515',
+    LEPHRIPADA: '7682807518',
+    GARJANBAHAL: '9692383702',
+    SADAR: '7682807514',
+    KINJIRKELA: '7682807513',
+    DARLIPALI: '7682807517',
+    MANGASPUR: '8144544325',
+    BILEIMUNDA: '8093061177',
+    HEMGIRI: '8093061196',
+    BONDEGA: '7682807512',
+    KUNDUKELA: '7682807505'
+};
+
+async function getAllCollectionDocs(collectionName, pageSize = 500) {
+    const docs = [];
+    let lastDoc = null;
+    while (true) {
+        let query = db.collection(collectionName).limit(pageSize);
+        if (lastDoc) query = query.startAfter(lastDoc);
+        const snapshot = await query.get();
+        if (snapshot.empty) break;
+        snapshot.forEach(doc => docs.push({ id: doc.id, data: doc.data() }));
+        lastDoc = snapshot.docs[snapshot.docs.length - 1];
+        if (snapshot.size < pageSize) break;
+    }
+    return docs;
+}
+
+async function applyPssPhoneMapping(mapping = PSS_PHONE_MAPPING, options = {}) {
+    const targetByPss = {};
+    Object.entries(mapping || {}).forEach(([pss, phone]) => {
+        const normalized = normalizePhone(phone);
+        if (isValidPhone(normalized)) {
+            targetByPss[String(pss || '').trim().toLowerCase()] = normalized;
+        }
+    });
+
+    const adminPhone = options.adminPhone ? normalizePhone(options.adminPhone) : null;
+    const updateAdmin = options.updateAdmin !== false;
+
+    const phoneUpdate = (data, newPhone) => {
+        const update = {
+            phoneNumber: newPhone,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        if (data.phone !== undefined) update.phone = newPhone;
+        return update;
+    };
+
+    let usersUpdated = 0;
+    let entriesUpdated = 0;
+    const failures = [];
+
+    const users = await getAllCollectionDocs('users');
+    for (let i = 0; i < users.length; i += 500) {
+        const batch = db.batch();
+        const chunk = users.slice(i, i + 500);
+        let chunkCount = 0;
+        chunk.forEach(({ id, data }) => {
+            try {
+                let newPhone = null;
+                const role = String(data.role || '').toLowerCase();
+                const name = String(data.name || '').toLowerCase();
+                if (updateAdmin && adminPhone && (role === 'admin' || name.includes('admin'))) {
+                    newPhone = adminPhone;
+                } else {
+                    const target = targetByPss[String(data.pssStation || '').trim().toLowerCase()];
+                    const current = normalizePhone(data.phoneNumber || data.phone || '');
+                    if (target && current !== target) newPhone = target;
+                }
+                if (newPhone) {
+                    batch.update(db.collection('users').doc(id), phoneUpdate(data, newPhone));
+                    chunkCount += 1;
+                    if (adminState.users) {
+                        const u = adminState.users.find(user => user.id === id);
+                        if (u) {
+                            u.phoneNumber = newPhone;
+                            if (u.phone !== undefined) u.phone = newPhone;
+                        }
+                    }
+                }
+            } catch (error) {
+                failures.push(`User ${id}: ${error.message}`);
+            }
+        });
+        if (chunkCount > 0) {
+            await batch.commit();
+            usersUpdated += chunkCount;
+        }
+    }
+
+    const entries = await getAllCollectionDocs('daily_entries');
+    for (let i = 0; i < entries.length; i += 500) {
+        const batch = db.batch();
+        const chunk = entries.slice(i, i + 500);
+        let chunkCount = 0;
+        chunk.forEach(({ id, data }) => {
+            try {
+                const target = targetByPss[String(data.pssStation || '').trim().toLowerCase()];
+                const current = normalizePhone(data.phoneNumber || data.phone || '');
+                if (target && current !== target) {
+                    batch.update(db.collection('daily_entries').doc(id), phoneUpdate(data, target));
+                    chunkCount += 1;
+                    const updateEntry = entry => {
+                        if (entry.id === id) {
+                            entry.phoneNumber = target;
+                            if (entry.phone !== undefined) entry.phone = target;
+                        }
+                    };
+                    adminState.allSubmissions.forEach(updateEntry);
+                    if (adminState.aiDataLoaded) adminState.aiSubmissions.forEach(updateEntry);
+                }
+            } catch (error) {
+                failures.push(`Entry ${id}: ${error.message}`);
+            }
+        });
+        if (chunkCount > 0) {
+            await batch.commit();
+            entriesUpdated += chunkCount;
+        }
+    }
+
+    if (typeof renderManageUsers === 'function') renderManageUsers();
+    if (typeof renderManagePSS === 'function') renderManagePSS();
+
+    const msg = `PSS phone mapping applied: ${usersUpdated} users, ${entriesUpdated} daily entries.${failures.length ? ' Failures: ' + failures.join('; ') : ''}`;
+    console.log(msg);
+    alert(msg);
+    return { usersUpdated, entriesUpdated, failures };
+}
+
+window.PSS_PHONE_MAPPING = PSS_PHONE_MAPPING;
+window.applyPssPhoneMapping = applyPssPhoneMapping;
+
+function reviveFirestoreValues(value) {
+    if (Array.isArray(value)) return value.map(reviveFirestoreValues);
+    if (value && typeof value === 'object') {
+        if (typeof value.seconds === 'number' && typeof value.nanoseconds === 'number') {
+            return firebase.firestore.Timestamp.fromMillis(value.seconds * 1000 + Math.floor(value.nanoseconds / 1e6));
+        }
+        const out = {};
+        Object.keys(value).forEach(key => { out[key] = reviveFirestoreValues(value[key]); });
+        return out;
+    }
+    return value;
+}
+
+function normalizeRestoreRecord(collectionName, rawDoc) {
+    const data = reviveFirestoreValues(rawDoc);
+    const fallbackId = String(rawDoc.id || '').trim();
+    delete data.id;
+    if (collectionName === 'users') {
+        data.phoneNumber = normalizePhone(data.phoneNumber || data.phone || fallbackId);
+        if (!data.status) data.status = data.isActive === false ? 'inactive' : 'active';
+        if (!data.role) data.role = 'user';
+        if (!data.name) data.name = fallbackId;
+    } else if (collectionName === 'pss_stations') {
+        if (!data.name) data.name = fallbackId;
+        if (data.feeders === undefined || data.feeders === null) data.feeders = [];
+        const nameList = value => {
+            if (Array.isArray(value)) return value.map(item => String(item).trim()).filter(Boolean);
+            return String(value || '').split(/[\n,]+/).map(item => item.trim()).filter(Boolean);
+        };
+        data.linemen = nameList(data.linemen ?? data.lineman);
+        data.helpers = nameList(data.helpers ?? data.helper);
+    } else if (collectionName === 'daily_entries') {
+        data.phoneNumber = normalizePhone(data.phoneNumber || data.phone || '');
+        if (data.date && typeof data.date.toDate === 'function') {
+            data.date = toLocalISODate(data.date.toDate());
+        } else {
+            data.date = normalizeDateValue(data.date || data.entryDate || '');
+        }
+        if (!data.pssStation) data.pssStation = data.pss || data.station || data.pssName || '';
+        if (!data.staffName) data.staffName = data.lineman || data.helper || data.name || '';
+        if (!data.phoneNumber) data.phoneNumber = '';
+    }
+    return data;
+}
+
+async function restoreDatabase(file) {
+    const statusEl = document.getElementById('restoreStatus');
+    if (!file) return;
+    if (!confirm('Restore this backup into the current Firebase project?\n\nDocuments with the same IDs will be overwritten.')) return;
+    statusEl.textContent = 'Reading backup...';
+    try {
+        const text = await file.text();
+        const backup = JSON.parse(text);
+        const collections = backup.collections || backup;
+        const supported = ['users', 'pss_stations', 'daily_entries'];
+        let total = 0;
+        for (const collectionName of supported) {
+            const docs = Array.isArray(collections[collectionName]) ? collections[collectionName] : [];
+            statusEl.textContent = `Restoring ${collectionName} (${docs.length})...`;
+            for (let i = 0; i < docs.length; i += 400) {
+                const batch = db.batch();
+                docs.slice(i, i + 400).forEach(rawDoc => {
+                    const { id, ...rest } = rawDoc;
+                    const data = normalizeRestoreRecord(collectionName, { id, ...rest });
+                    const ref = id ? db.collection(collectionName).doc(id) : db.collection(collectionName).doc();
+                    batch.set(ref, data, { merge: false });
+                });
+                await batch.commit();
+                total += Math.min(400, docs.length - i);
+            }
+        }
+        statusEl.textContent = `Restored ${total} documents. Reloading...`;
+        await Promise.all([loadUsers(), loadPSSStations()]);
+        adminState.allSubmissions = [];
+        adminState.aiSubmissions = [];
+        adminState.aiDataLoaded = false;
+        await loadAllSubmissions();
+        renderManageUsers();
+        renderManagePSS();
+        statusEl.textContent = `Restore complete: ${total} documents.`;
+        alert(`Backup restored: ${total} documents.`);
+    } catch (error) {
+        console.error('Restore error:', error);
+        statusEl.textContent = 'Restore failed: ' + error.message;
+        alert('Restore failed: ' + error.message);
+    }
 }
 
 // ============================================
@@ -2953,14 +4122,14 @@ async function loadAllSubmissions() {
         if (adminState.allSubmissions.length === 0) {
             console.log('📊 Fetching submissions for UI (latest 500)...');
             const snapshot = await db.collection('daily_entries')
-                .orderBy('timestamp', 'desc')
-                .limit(500)
+                .orderBy('date', 'desc')
+                .limit(ADMIN_REALTIME_LIMIT)
                 .get();
             
-            adminState.allSubmissions = snapshot.docs.map(doc => ({
+            adminState.allSubmissions = decorateEntries(snapshot.docs.map(doc => ({
                 id: doc.id,
                 ...doc.data()
-            }));
+            })));
             
             adminState.filteredSubmissions = [...adminState.allSubmissions];
             console.log(`✅ Loaded ${adminState.allSubmissions.length} submissions for UI`);
@@ -2975,6 +4144,9 @@ async function loadAllSubmissions() {
             console.log(`✅ Using cached data: ${adminState.allSubmissions.length} submissions`);
         }
         
+        adminState.allSubmissions = decorateEntries(adminState.allSubmissions);
+        adminState.filteredSubmissions = [...adminState.allSubmissions];
+
         // Log latest 5 submissions for verification
         if (adminState.allSubmissions.length > 0) {
             console.log('📋 Latest 5 submissions:');
@@ -2996,19 +4168,16 @@ async function loadAllSubmissions() {
             const pssStations = [...new Set(adminState.allSubmissions.map(s => s.pssStation))].filter(Boolean).sort();
             filterPSS.innerHTML = '<option value="">All PSS Stations</option>';
             pssStations.forEach(pss => {
-                filterPSS.innerHTML += `<option value="${pss}">${pss}</option>`;
+                filterPSS.innerHTML += `<option value="${escapeHtml(pss)}">${escapeHtml(pss)}</option>`;
             });
             
-            // Add event listener to update staff dropdown when PSS changes
-            filterPSS.addEventListener('change', function() {
-                const selectedPSS = this.value;
-                updateStaffFilterByPSS(selectedPSS);
-                
-                // Refresh custom select dropdown if it exists
+            // Assign (not add) so repeated loads do not stack listeners.
+            filterPSS.onchange = function() {
+                updateStaffFilterByPSS(this.value);
                 if (typeof window.refreshCustomSelects === 'function') {
                     setTimeout(() => window.refreshCustomSelects(), 100);
                 }
-            });
+            };
         }
         
         // Populate staff filter dropdown
@@ -3040,7 +4209,6 @@ async function loadAllSubmissionsForAI() {
     
     while (true) {
         let query = db.collection('daily_entries')
-            .orderBy('timestamp', 'desc')
             .limit(pageSize);
         
         if (lastDoc) {
@@ -3056,16 +4224,19 @@ async function loadAllSubmissionsForAI() {
         page += 1;
     }
     
-    adminState.aiSubmissions = allDocs.map(doc => ({
+    adminState.aiSubmissions = decorateEntries(allDocs.map(doc => ({
         id: doc.id,
         ...doc.data()
-    }));
+    })));
     adminState.aiDataLoaded = true;
     console.log(`✅ AI dataset ready: ${adminState.aiSubmissions.length} records`);
     
     if (typeof updateDataContext === 'function') {
         updateDataContext(adminState.aiSubmissions);
-        console.log('✅ Chatbot data context updated (full dataset)');
+        console.log('? Chatbot data context updated (full dataset)');
+    }
+    if (adminState.currentWindow === 'analytics' && typeof renderAllNewAnalytics === 'function') {
+        renderAllNewAnalytics(adminState.aiSubmissions);
     }
 }
 
@@ -3344,6 +4515,7 @@ function renderDataBatch(batch) {
                 </td>
                 <td style="padding: 12px 10px;">
                     <button class="btn-action" onclick="viewEntryDetails('${entry.id}')" style="background: #3b82f6; display: block; width: 100%; margin-bottom: 6px;">📊 View</button>
+                    <button class="btn-action" onclick="editSubmission('${entry.id}')" style="background: #10b981; display: block; width: 100%; margin-bottom: 6px;">Edit</button>
                     <button class="btn-action" onclick="deleteEntry('${entry.id}')" style="background: #ef4444; display: block; width: 100%;">📊? Delete</button>
                 </td>
             </tr>
@@ -4002,11 +5174,19 @@ async function deleteEntry(entryId) {
 
 // Settings functions
 function manageUsers() {
-    alert('User Management:\n\nThis feature allows you to:\n- Add new users\n- Edit user details\n- Deactivate/activate users\n- Reset passwords\n\nComing in next update!');
+    showAdminWindow('manage');
+    setTimeout(() => {
+        const usersCard = document.getElementById('manageUsersBody');
+        if (usersCard) usersCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
 }
 
 function managePSS() {
-    alert('PSS Station Management:\n\nThis feature allows you to:\n- Add new PSS stations\n- Edit PSS configuration\n- Update feeder lists\n- Manage staff assignments\n\nComing in next update!');
+    showAdminWindow('manage');
+    setTimeout(() => {
+        const pssCard = document.getElementById('managePSSBody');
+        if (pssCard) pssCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
 }
 
 async function backupDatabase() {
@@ -5660,7 +6840,8 @@ let previewDataStore = {
     headers: [],
     rows: [],
     originalData: [],
-    workbook: null
+    workbook: null,
+    dailyEntries: []
 };
 
 // Excel file upload handler
@@ -5778,12 +6959,57 @@ async function processExcelSheet(workbook, sheetName) {
         const headers = Object.keys(data[0]);
         console.log('📊 Headers found:', headers);
         
-        // Detect data type
-        const dataType = detectDataType(headers);
-        console.log('📊 Detected data type:', dataType);
+        // Detect data type (admin can force it from the dropdown)
+        const forcedType = document.getElementById('excelDataType')?.value || 'auto';
+        const dataType = forcedType === 'auto'
+            ? (isEquipmentReport(headers) ? 'daily_entries' : detectDataType(headers))
+            : forcedType;
+        console.log('Data type:', dataType);
         
         if (dataType === 'unknown') {
-            throw new Error('Could not identify data type. Expected columns for PSS Stations, Users, or Daily Entries.');
+            throw new Error('Could not identify data type. Select the data type in the dropdown above.');
+        }
+
+        if (dataType === 'daily_entries' && isEquipmentReport(headers)) {
+            const entries = parseEquipmentReport(sheet);
+            if (!entries.length) {
+                throw new Error('No usable daily rows found. Check Date, PSS and Equipment Name columns.');
+            }
+
+            const existingSnap = await db.collection('daily_entries').get();
+            const existingByPSSDate = {};
+            const existingByPSSDateStaff = {};
+            existingSnap.forEach(doc => {
+                const record = { id: doc.id, ...doc.data() };
+                const pssDate = `${String(record.pssStation || '').toLowerCase()}||${normalizeDateValue(record.date)}`;
+                existingByPSSDate[pssDate] = existingByPSSDate[pssDate] || record;
+                existingByPSSDateStaff[`${pssDate}||${String(record.staffName || '').toLowerCase()}`] = record;
+            });
+
+            entries.forEach(entry => {
+                const pssDate = `${String(entry.pssStation || '').toLowerCase()}||${entry.date}`;
+                const existing = existingByPSSDateStaff[`${pssDate}||${String(entry.staffName || '').toLowerCase()}`] || existingByPSSDate[pssDate];
+                entry._existingId = existing?.id || '';
+                entry._status = existing ? 'changed' : 'new';
+            });
+
+            const displayHeaders = ['date', 'pssStation', 'staffName', 'circle', 'division'];
+            previewDataStore.headers = displayHeaders;
+            previewDataStore.rows = entries;
+            previewDataStore.dailyEntries = entries;
+            previewDataStore.type = 'daily_entries';
+            previewDataStore.originalData = JSON.parse(JSON.stringify(entries));
+            previewDataStore.workbook = workbook;
+            previewDataStore.currentSheet = sheetName;
+
+            displayPreviewTable('daily_entries', displayHeaders, entries, workbook);
+
+            const newCount = entries.filter(e => e._status === 'new').length;
+            const changedCount = entries.filter(e => e._status === 'changed').length;
+            statusDiv.innerHTML = `<div style="color:#10b981;font-weight:600;">
+                Loaded ${entries.length} daily entries (${newCount} new, ${changedCount} existing) from equipment rows.
+            </div>`;
+            return;
         }
         
         // Fetch existing Firebase data
@@ -5847,7 +7073,7 @@ function detectDataType(headers) {
     console.log('📊 Detection flags:', { hasName, hasPhone, hasFeeders, hasLineman, hasHelper });
     
     // PSS Stations: Name + Phone is enough (feeders/lineman/helper are optional)
-    if ((hasName || hasPhone) && headers.length >= 2) {
+    if (false) {
         console.log('? Detected as PSS Stations Data');
         return 'pss_stations';
     }
@@ -5868,8 +7094,160 @@ function detectDataType(headers) {
     if (hasDate && (hasStaff || hasPss) && hasReadings) {
         return 'daily_entries';
     }
+
+    const hasStatus = normalized.some(h => h.includes('status') || h.includes('active'));
+    const hasStaffType = normalized.some(h => h.includes('stafftype') || h.includes('usertype'));
+    if (hasPhone && (hasRole || hasStatus || hasStaffType)) {
+        return 'users';
+    }
+    if (hasPhone && hasPss && !hasFeeders && !hasLineman && !hasHelper) {
+        return 'users';
+    }
+    if ((hasPss || hasName) && (hasFeeders || hasLineman || hasHelper)) {
+        return 'pss_stations';
+    }
+    if (hasPhone && hasName) {
+        return 'users';
+    }
     
     return 'unknown';
+}
+
+function normalizeHeaderKey(header) {
+    return String(header || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function isEquipmentReport(headers) {
+    return headers.some(header => normalizeHeaderKey(header) === 'equipmentname');
+}
+
+function parseNumberValue(value) {
+    if (value === null || value === undefined) return 0;
+    const text = String(value).replace(/[^0-9.\-]/g, '');
+    const number = Number(text);
+    return isFinite(number) ? number : 0;
+}
+
+function parseClockValue(value) {
+    const match = String(value || '').trim().match(/^(\d{1,2}):(\d{2})/);
+    if (!match) return '';
+    return `${String(Math.min(23, Number(match[1]))).padStart(2, '0')}:${match[2]}`;
+}
+
+function classifyEquipment(equipmentName) {
+    const name = String(equipmentName || '').trim();
+    const upper = name.toUpperCase().replace(/\s+/g, ' ');
+    if (/I\s*\/\s*C\s*[- ]?\s*1/.test(upper)) return { type: 'ic1' };
+    if (/I\s*\/\s*C\s*[- ]?\s*2/.test(upper)) return { type: 'ic2' };
+    let ptr = upper.match(/PTR\s*[- ]?\s*(\d+)[\s\S]*?(33|11)\s*KV/);
+    if (ptr) return { type: `ptr${ptr[1]}_${ptr[2]}kv` };
+    if (upper.includes('CHARGER')) return { type: 'charger' };
+    if (upper.includes('TRANSFORMER') && !upper.includes('PTR')) return { type: 'stationTransformer' };
+    if (/^(33|11)\s*KV\b/.test(upper)) {
+        const feederName = name.replace(/^\s*(33|11)\s*KV\s*/i, '').trim();
+        return { type: 'feeder', name: feederName || 'Feeder' };
+    }
+    return null;
+}
+
+function resolvePSSName(rawName) {
+    const text = String(rawName || '').trim();
+    if (!text) return '';
+    const textLower = text.toLowerCase();
+    const stations = Array.isArray(adminState.pssStations) ? adminState.pssStations : [];
+    const match = stations.find(station => {
+    const name = String(station.name || station.id || '').trim().toLowerCase();
+    if (name === textLower) return true;
+    const alts = Array.isArray(station.alternateNames) ? station.alternateNames : [];
+    return alts.some(a => String(a).trim().toLowerCase() === textLower);
+    });
+    return match ? String(match.name || match.id).trim() : text.toUpperCase();
+    }
+
+function parseEquipmentReport(sheet) {
+    const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    const headerIndex = matrix.findIndex(row => row.some(cell => normalizeHeaderKey(cell) === 'equipmentname'));
+    if (headerIndex < 0) return [];
+
+    const headerRow = matrix[headerIndex];
+    const findColumn = (...names) => headerRow.findIndex(cell => names.includes(normalizeHeaderKey(cell)));
+    const dateCol = findColumn('date');
+    const circleCol = findColumn('circle');
+    const divisionCol = findColumn('division');
+    const pssCol = findColumn('pss', 'pssname', 'station');
+    const equipmentCol = findColumn('equipmentname', 'equipment');
+    const ptrCol = findColumn('ptrno', 'ptr');
+    const staffCol = findColumn('staffname', 'staff', 'name');
+    const phoneCol = findColumn('phonenumber', 'phone', 'mobile');
+    const maxVoltageCol = findColumn('maxvoltage');
+    const minVoltageCol = findColumn('minvoltage');
+    const maxLoadCol = findColumn('maxloading', 'maxload');
+    const minLoadCol = findColumn('minloading', 'minload');
+    const timeCols = headerRow.map((cell, index) => normalizeHeaderKey(cell) === 'time' ? index : -1).filter(index => index >= 0);
+
+    if (dateCol < 0 || pssCol < 0 || equipmentCol < 0) return [];
+
+    const groups = {};
+    for (let r = headerIndex + 1; r < matrix.length; r++) {
+        const row = matrix[r];
+        const date = normalizeDateValue(row[dateCol]);
+        const pssStation = resolvePSSName(row[pssCol]);
+        const equipmentName = String(row[equipmentCol] || '').trim();
+        if (!date || !pssStation || !equipmentName) continue;
+
+        const target = classifyEquipment(equipmentName);
+        if (!target) continue;
+
+        const key = `${pssStation.toLowerCase()}||${date}`;
+        if (!groups[key]) {
+            groups[key] = {
+                pssStation,
+                date,
+                circle: String(row[circleCol] || '').trim(),
+                division: String(row[divisionCol] || '').trim(),
+                staffName: String(row[staffCol] || '').trim() || 'Imported',
+                phoneNumber: normalizePhone(row[phoneCol] || ''),
+                ic1: {},
+                ic2: {},
+                feeders: {},
+                stationTransformer: {},
+                charger: {}
+            };
+        }
+        const entry = groups[key];
+        const values = {
+            maxVoltage: parseNumberValue(row[maxVoltageCol]),
+            maxVoltageTime: parseClockValue(row[timeCols[0]]),
+            minVoltage: parseNumberValue(row[minVoltageCol]),
+            minVoltageTime: parseClockValue(row[timeCols[1]]),
+            maxLoad: parseNumberValue(row[maxLoadCol]),
+            maxLoadTime: parseClockValue(row[timeCols[2]]),
+            minLoad: parseNumberValue(row[minLoadCol]),
+            minLoadTime: parseClockValue(row[timeCols[3]])
+        };
+
+        if (target.type === 'feeder') {
+            const feederName = target.name;
+            entry.feeders[feederName] = {
+                name: feederName,
+                ptrNo: parseNumberValue(row[ptrCol]),
+                ...values
+            };
+        } else {
+            const actualType = target.type === 'stationTransformer' ? 'stationTransformer' :
+                target.type === 'charger' ? 'charger' : target.type;
+            entry[actualType] = { ...(entry[actualType] || {}), ...values };
+            if (actualType === 'charger') entry.charger.ptrNo = parseNumberValue(row[ptrCol]);
+        }
+    }
+
+    return Object.values(groups).map(entry => {
+        const feederValues = Object.values(entry.feeders);
+        entry.feederCount = feederValues.length;
+        entry.totalMaxLoad = Number(feederValues.reduce((sum, feeder) => sum + feeder.maxLoad, 0).toFixed(2));
+        entry.totalMinLoad = Number(feederValues.reduce((sum, feeder) => sum + feeder.minLoad, 0).toFixed(2));
+        return entry;
+    });
 }
 
 // Analyze Firestore structure to understand actual data format
@@ -6145,16 +7523,16 @@ function getDocumentId(row, dataType, headers) {
         const phoneIdx = normalized.findIndex(h => h.includes('phone') || h.includes('number'));
         if (phoneIdx >= 0) {
             const phoneCol = headers[phoneIdx];
-            return String(row[phoneCol] || '').trim();
+            return normalizePhone(row[phoneCol]);
         }
     } else if (dataType === 'daily_entries') {
         // Use phoneNumber_date as ID
-        const phoneIdx = normalized.findIndex(h => h.includes('phone') || h.includes('number'));
+        const phoneIdx = normalized.findIndex(h => h.includes('phone') || h.includes('mobile'));
         const dateIdx = normalized.findIndex(h => h.includes('date'));
         
         if (phoneIdx >= 0 && dateIdx >= 0) {
-            const phone = String(row[headers[phoneIdx]] || '').trim();
-            const date = String(row[headers[dateIdx]] || '').trim();
+            const phone = normalizePhone(row[headers[phoneIdx]]);
+            const date = normalizeDateValue(row[headers[dateIdx]]);
             return `${phone}_${date}`;
         }
     }
@@ -6396,6 +7774,50 @@ function getDataTypeLabel(type) {
     return labels[type] || 'Unknown Data';
 }
 
+async function saveDailyEntryRows(entries) {
+    const statusDiv = document.getElementById('excelUploadStatus');
+    let newCount = 0;
+    let updatedCount = 0;
+    const errors = [];
+
+    for (let i = 0; i < entries.length; i += 400) {
+        const chunk = entries.slice(i, i + 400);
+        const batch = db.batch();
+        let chunkNew = 0;
+        let chunkUpdated = 0;
+        chunk.forEach(entry => {
+            const payload = { ...entry };
+            delete payload._status;
+            delete payload._existingId;
+            delete payload._sortValue;
+            payload.timestamp = payload.timestamp || firebase.firestore.FieldValue.serverTimestamp();
+            payload.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
+            payload.lastUpdated = firebase.firestore.FieldValue.serverTimestamp();
+            const ref = entry._existingId
+                ? db.collection('daily_entries').doc(entry._existingId)
+                : db.collection('daily_entries').doc();
+            batch.set(ref, payload, { merge: true });
+            if (entry._existingId) chunkUpdated++; else chunkNew++;
+        });
+        try {
+            await batch.commit();
+            newCount += chunkNew;
+            updatedCount += chunkUpdated;
+        } catch (error) {
+            errors.push(`Rows ${i + 1}-${i + chunk.length}: ${error.message}`);
+        }
+        statusDiv.innerHTML = `<div style="color:#3b82f6;">Saving daily entries... ${Math.min(i + 400, entries.length)} / ${entries.length}</div>`;
+    }
+
+    showUploadReport(generateUploadReportMerge(newCount, updatedCount, errors.length, errors));
+    statusDiv.innerHTML = `<div style="color:#10b981;">Saved ${newCount + updatedCount} daily entries.</div>`;
+    setTimeout(cancelPreview, 1200);
+    adminState.allSubmissions = [];
+    adminState.aiSubmissions = [];
+    adminState.aiDataLoaded = false;
+    await loadAllSubmissions();
+}
+
 // Save to Firebase - UPDATE existing data (merge with Excel changes)
 async function savePreviewData() {
     if (!previewDataStore.type || !previewDataStore.rows.length) {
@@ -6405,6 +7827,14 @@ async function savePreviewData() {
     
     const confirmMsg = `This will update ${previewDataStore.rows.length} records in ${previewDataStore.type}.\n\nChanges will be merged with existing data.\n\nAre you sure?`;
     if (!confirm(confirmMsg)) {
+        return;
+    }
+
+    if (previewDataStore.dailyEntries && previewDataStore.dailyEntries.length) {
+        previewDataStore.dailyEntries.forEach(entry => {
+            if (!entry.phoneNumber) entry.phoneNumber = '';
+        });
+        await saveDailyEntryRows(previewDataStore.dailyEntries);
         return;
     }
     
@@ -6420,9 +7850,21 @@ async function savePreviewData() {
         // Fetch existing data first
         statusDiv.innerHTML = '<div style="color: #3b82f6;">Step 1/2: Checking existing data...</div>';
         const existingData = {};
+        const usersByPhone = {};
+        const entriesByKey = {};
+        const pssByName = {};
         const snapshot = await db.collection(previewDataStore.type).get();
         snapshot.forEach(doc => {
-            existingData[doc.id.toUpperCase()] = doc.data();
+            const record = { id: doc.id, ...doc.data() };
+            existingData[doc.id.toUpperCase()] = record;
+            if (previewDataStore.type === 'users') {
+                usersByPhone[normalizePhone(record.phoneNumber || record.phone || doc.id)] = record;
+            } else if (previewDataStore.type === 'daily_entries') {
+                const key = `${normalizePhone(record.phoneNumber)}_${normalizeDateValue(record.date)}`;
+                entriesByKey[key] = record;
+            } else if (previewDataStore.type === 'pss_stations') {
+                pssByName[managedPSSName(record).toUpperCase()] = record;
+            }
         });
         console.log(`📊 Found ${Object.keys(existingData).length} existing records`);
         
@@ -6432,8 +7874,40 @@ async function savePreviewData() {
         
         for (const row of previewDataStore.rows) {
             try {
-                // Get document ID from Excel data (use exact Excel format)
-                const docId = getDocumentId(row, previewDataStore.type, headers);
+                // Resolve the existing document by real fields, not by guessed IDs.
+                let docId = getDocumentId(row, previewDataStore.type, headers);
+                let existingRecord = null;
+                let docRef = null;
+
+                if (previewDataStore.type === 'users') {
+                    const rawPhone = findRowValue(row, headers, ['phone', 'mobile', 'number']);
+                    const phone = normalizePhone(rawPhone || docId);
+                    if (phone) {
+                        docId = phone;
+                        existingRecord = usersByPhone[phone] || null;
+                        docRef = existingRecord
+                            ? db.collection('users').doc(existingRecord.id)
+                            : db.collection('users').doc(phone);
+                    }
+                } else if (previewDataStore.type === 'daily_entries') {
+                    const rawPhone = findRowValue(row, headers, ['phone', 'mobile']);
+                    const rawDate = findRowValue(row, headers, ['date']);
+                    const rawPSS = findRowValue(row, headers, ['pssstation', 'pss']);
+                    const key = `${normalizePhone(rawPhone)}_${normalizeDateValue(rawDate)}`;
+                    existingRecord = entriesByKey[key] || null;
+                    docId = existingRecord?.id || key || `import_${rawPSS}_${normalizeDateValue(rawDate)}`;
+                    docRef = db.collection('daily_entries').doc(String(docId).replace(/\//g, '-'));
+                } else if (previewDataStore.type === 'pss_stations') {
+                    const rawName = findRowValue(row, headers, ['pssname', 'stationname', 'name', 'pss']);
+                    const name = String(rawName || docId).trim().toUpperCase();
+                    if (name) {
+                        docId = name;
+                        existingRecord = pssByName[name] || null;
+                        docRef = existingRecord
+                            ? db.collection('pss_stations').doc(existingRecord.id)
+                            : db.collection('pss_stations').doc(name);
+                    }
+                }
                 
                 if (!docId) {
                     console.warn('📊 Skipping row - no document ID:', row);
@@ -6443,14 +7917,13 @@ async function savePreviewData() {
                 }
                 
                 // Check if record exists
-                const existingRecord = existingData[docId.toUpperCase()];
                 const isNew = !existingRecord;
                 
                 // Normalize data for Firestore (merge with existing)
                 const normalizedData = normalizeRowDataWithMerge(row, previewDataStore.type, headers, existingRecord || {});
+                if (!docRef) docRef = db.collection(previewDataStore.type).doc(String(docId).replace(/\//g, '-'));
                 
                 // Save to Firestore (merge mode)
-                const docRef = db.collection(previewDataStore.type).doc(docId);
                 await docRef.set(normalizedData, { merge: true });
                 
                 if (isNew) {
@@ -6487,44 +7960,133 @@ async function savePreviewData() {
 }
 
 // Normalize data with merge logic (keeps existing data, updates only changed fields)
-function normalizeRowDataWithMerge(row, dataType, headers, existingData = {}) {
-    const normalized = { ...existingData }; // Start with existing data
-    const headerMap = headers.map(h => h.toLowerCase().trim().replace(/[\/\s_-]+/g, ''));
-    
-    headers.forEach((header, idx) => {
-        if (header.startsWith('_')) return; // Skip internal fields
-        
-        const value = row[header];
-        const normalizedKey = headerMap[idx];
-        
-        // Only update if Excel has a value
-        if (value !== undefined && value !== null && String(value).trim() !== '') {
-            // Map to Firestore field names
-            if (normalizedKey.includes('name') || normalizedKey === 'pss' || normalizedKey === 'pssadmin') {
-                normalized.name = String(value).trim();
-            } else if (normalizedKey.includes('phone') || normalizedKey.includes('number')) {
-                normalized.phoneNumber = String(value).trim();
-            } else if (normalizedKey.includes('feeder')) {
-                normalized.feeders = parseInt(value) || 0;
-            } else if (normalizedKey.includes('lineman')) {
-                const linemanValue = String(value).trim();
-                normalized.lineman = linemanValue ? linemanValue.split(',').map(s => s.trim()).filter(s => s) : [];
-            } else if (normalizedKey.includes('helper')) {
-                const helperValue = String(value).trim();
-                normalized.helper = helperValue ? helperValue.split(',').map(s => s.trim()).filter(s => s) : [];
-            } else if (normalizedKey.includes('role')) {
-                normalized.role = String(value).trim();
-            } else if (normalizedKey.includes('date')) {
-                normalized.date = String(value).trim();
-            } else {
-                normalized[header] = value;
+function findRowValue(row, headers, patterns) {
+    for (let i = 0; i < headers.length; i++) {
+        const key = normalizeHeaderKey(headers[i]);
+        if (patterns.some(pattern => key.includes(pattern))) {
+            const value = row[headers[i]];
+            if (value !== undefined && value !== null && String(value).trim() !== '') {
+                return String(value).trim();
             }
         }
+    }
+    return '';
+}
+
+function buildFeederArrayFromValue(value, existingFeeders) {
+    const existing = Array.isArray(existingFeeders) ? existingFeeders : [];
+    const text = String(value || '').trim();
+    if (!text) return existing;
+    if (/^\d+$/.test(text)) {
+        const count = parseInt(text, 10);
+        return Array.from({ length: count }, (_, index) => {
+            const prior = existing[index];
+            if (prior) return prior;
+            return { id: `feeder_${index + 1}`, name: `Feeder-${index + 1}`, ptrNo: index + 1 };
+        });
+    }
+    return text.split(/[\n,]+/).map(v => v.trim()).filter(Boolean).map((name, index) => {
+        const prior = existing.find(f => (f.name || f.feederName) === name) || existing[index] || {};
+        return { ...prior, id: prior.id || `feeder_${index + 1}`, name, ptrNo: prior.ptrNo || index + 1 };
     });
-    
-    // Add/update metadata
+}
+
+function applyFlatDailyValues(entry, row, headers) {
+    headers.forEach(header => {
+        if (header.startsWith('_')) return;
+        const value = row[header];
+        if (value === undefined || value === null || String(value).trim() === '') return;
+        const key = normalizeHeaderKey(header);
+
+        if (key.includes('date')) { entry.date = normalizeDateValue(value); return; }
+        if (key === 'pss' || key.includes('pssstation') || key.includes('stationname')) { entry.pssStation = String(value).trim(); return; }
+        if (key.includes('staffname') || key === 'staff' || key === 'name') { entry.staffName = String(value).trim(); return; }
+        if (key.includes('phone') || key.includes('mobile')) { entry.phoneNumber = normalizePhone(value); return; }
+        if (key.includes('circle')) { entry.circle = String(value).trim(); return; }
+        if (key.includes('division')) { entry.division = String(value).trim(); return; }
+
+        let target = null;
+        const icMatch = key.match(/ic(\d)/);
+        const ptrMatch = key.match(/ptr(\d+)(33|11)kv/);
+        if (icMatch) target = `ic${icMatch[1]}`;
+        else if (ptrMatch) target = `ptr${ptrMatch[1]}_${ptrMatch[2]}kv`;
+        else if (key.includes('stationtransformer')) target = 'stationTransformer';
+        else if (key.includes('charger')) target = 'charger';
+        if (!target) return;
+
+        let metric = '';
+        if (key.includes('maxvoltage')) metric = 'maxVoltage';
+        else if (key.includes('minvoltage')) metric = 'minVoltage';
+        else if (key.includes('maxload') || key.includes('maxloading')) metric = 'maxLoad';
+        else if (key.includes('minload') || key.includes('minloading')) metric = 'minLoad';
+        if (!metric) return;
+
+        const isTime = key.includes('time');
+        entry[target] = entry[target] || {};
+        entry[target][isTime ? `${metric}Time` : metric] = isTime
+            ? parseClockValue(value)
+            : parseNumberValue(value);
+    });
+    return entry;
+}
+
+function normalizeRowDataWithMerge(row, dataType, headers, existingData = {}) {
+    const normalized = { ...existingData };
+
+    if (dataType === 'pss_stations') {
+        const name = findRowValue(row, headers, ['pssname', 'stationname', 'name', 'pss']);
+        if (name) normalized.name = name;
+        const feederValue = findRowValue(row, headers, ['feeder']);
+        if (feederValue) {
+            normalized.feeders = buildFeederArrayFromValue(feederValue, existingData.feeders);
+            normalized.feederCount = normalized.feeders.length;
+        }
+        const linemenValue = findRowValue(row, headers, ['lineman']);
+        if (linemenValue) {
+            normalized.linemen = linemenValue.split(/[\n,]+/).map(v => v.trim()).filter(Boolean);
+            normalized.lineman = [...normalized.linemen];
+        }
+        const helpersValue = findRowValue(row, headers, ['helper']);
+        if (helpersValue) {
+            normalized.helpers = helpersValue.split(/[\n,]+/).map(v => v.trim()).filter(Boolean);
+            normalized.helper = [...normalized.helpers];
+        }
+        const ptrCount = findRowValue(row, headers, ['ptrcount', 'noofptr', 'ptrcount']);
+        if (ptrCount) normalized.ptrCount = parseNumberValue(ptrCount);
+        const circle = findRowValue(row, headers, ['circle']);
+        if (circle) normalized.circle = circle;
+        const division = findRowValue(row, headers, ['division']);
+        if (division) normalized.division = division;
+        normalized.isActive = existingData.isActive !== false;
+    } else if (dataType === 'users') {
+        const name = findRowValue(row, headers, ['name']);
+        if (name) normalized.name = name;
+        const phone = findRowValue(row, headers, ['phone', 'mobile', 'number']);
+        if (phone) normalized.phoneNumber = normalizePhone(phone);
+        const role = findRowValue(row, headers, ['role', 'usertype']);
+        if (role) normalized.role = role.toLowerCase().includes('admin') ? 'admin' : 'user';
+        const pss = findRowValue(row, headers, ['pssstation', 'pss', 'station']);
+        if (pss) normalized.pssStation = pss;
+        const staffType = findRowValue(row, headers, ['stafftype', 'type']);
+        if (staffType) normalized.staffType = staffType.toLowerCase();
+        const statusValue = findRowValue(row, headers, ['status', 'active']);
+        if (statusValue) {
+            normalized.status = /inactive|false|no|disabled/i.test(statusValue) ? 'inactive' : 'active';
+            normalized.isActive = normalized.status === 'active';
+        } else if (!normalized.status) {
+            normalized.status = existingData.isActive === false ? 'inactive' : 'active';
+            normalized.isActive = normalized.status === 'active';
+        }
+    } else if (dataType === 'daily_entries') {
+        const flat = applyFlatDailyValues({ ...existingData }, row, headers);
+        flat.pssStation = flat.pssStation || findRowValue(row, headers, ['pssstation', 'pss']);
+        flat.date = normalizeDateValue(flat.date || findRowValue(row, headers, ['date']));
+        flat.staffName = flat.staffName || findRowValue(row, headers, ['staffname', 'staff']);
+        flat.phoneNumber = normalizePhone(flat.phoneNumber || findRowValue(row, headers, ['phone', 'mobile']));
+        return flat;
+    }
+
     normalized.lastUpdated = firebase.firestore.FieldValue.serverTimestamp();
-    
     return normalized;
 }
 
@@ -6862,7 +8424,8 @@ function cancelPreview() {
         headers: [],
         rows: [],
         originalData: [],
-        workbook: null
+        workbook: null,
+        dailyEntries: []
     };
 }
 

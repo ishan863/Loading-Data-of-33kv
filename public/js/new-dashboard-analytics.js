@@ -32,7 +32,7 @@ async function renderComprehensiveDashboard(submissions) {
                 <label>Staff Name</label>
                 <select id="dashFilter-staff" onchange="refreshComprehensiveDashboard()">
                     <option value="">All Staff</option>
-                    ${[...new Set(submissions.map(s => s.lineman || s.helper))].filter(s => s).map(staff => 
+                    ${[...new Set(submissions.map(s => s.staffName || s.lineman || s.helper))].filter(s => s).map(staff => 
                         `<option value="${staff}">${staff}</option>`
                     ).join('')}
                 </select>
@@ -215,7 +215,7 @@ function calculateKPIs(submissions) {
     // Top 3 Staff
     const staffCount = {};
     submissions.forEach(s => {
-        const staff = s.lineman || s.helper || 'Unknown';
+        const staff = s.staffName || s.lineman || s.helper || 'Unknown';
         staffCount[staff] = (staffCount[staff] || 0) + 1;
     });
     const topStaff = Object.entries(staffCount)
@@ -267,7 +267,10 @@ function calculateKPIs(submissions) {
     
     // Last Submission Time
     if (submissions.length > 0) {
-        const lastSub = submissions[submissions.length - 1];
+        let lastSub = submissions[0];
+        submissions.forEach(item => {
+            if (String(item.date || '') > String(lastSub.date || '')) lastSub = item;
+        });
         const subDate = lastSub.date ? formatDate(lastSub.date) : 'N/A';
         document.querySelector('#kpi-last-submission .kpi-value').textContent = subDate;
     }
@@ -341,7 +344,7 @@ function renderStaffAnalytics(submissions) {
         
         const staffCount = {};
         submissions.forEach(s => {
-            const staff = s.lineman || s.helper || 'Unknown';
+            const staff = s.staffName || s.lineman || s.helper || 'Unknown';
             staffCount[staff] = (staffCount[staff] || 0) + 1;
         });
         

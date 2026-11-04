@@ -157,9 +157,15 @@ async function loadPSSConfig() {
         const configSnapshot = await db.collection('pss_stations').get();
         appState.pssConfig = {};
         
-        configSnapshot.forEach(doc => {
-            appState.pssConfig[doc.id] = doc.data();
-        });
+    configSnapshot.forEach(doc => {
+        const data = doc.data() || {};
+        const name = String(data.name || '').trim();
+        if (!data.name) data.name = doc.id;
+        appState.pssConfig[doc.id] = data;
+        if (name && !appState.pssConfig[name]) {
+            appState.pssConfig[name] = data;
+        }
+    });
         
         console.log('✅ PSS Configuration loaded', appState.pssConfig);
     } catch (error) {
@@ -200,6 +206,12 @@ function showScreen(screenId) {
 
 // Logout function
 function logout() {
+    if (typeof window.stopAllRealtimeListeners === 'function') {
+        window.stopAllRealtimeListeners();
+    }
+    if (typeof window.stopUserRealtimeListeners === 'function') {
+        window.stopUserRealtimeListeners();
+    }
     localStorage.removeItem('pssUser');
     appState.currentUser = null;
     appState.userData = null;
@@ -253,6 +265,152 @@ function formatTimestamp(timestamp) {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     return `${day}-${month}-${year} ${hours}:${minutes}`;
+}
+
+// ============================================
+// SHARED DATA UTILITIES (all screens)
+// ============================================
+const APP_TIMEZONE = 'Asia/Kolkata';
+
+function todayLocalISO() {
+    try {
+        return new Date().toLocaleDateString('en-CA', { timeZone: APP_TIMEZONE });
+    } catch (e) {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+}
+
+function toLocalISODate(value) {
+    if (!value) return '';
+    if (value instanceof Date && !isNaN(value)) {
+        try {
+            return value.toLocaleDateString('en-CA', { timeZone: APP_TIMEZONE });
+        } catch (e) {
+            return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+        }
+    }
+    return normalizeDateValue(value);
+}
+
+function normalizeDateValue(value) {
+    if (value === null || value === undefined || value === '') return '';
+    if (value instanceof Date && !isNaN(value)) return toLocalISODate(value);
+    if (typeof value === 'number' && isFinite(value)) {
+        const ms = Date.UTC(1899, 11, 30) + Math.round(value) * 86400000;
+        const d = new Date(ms);
+        return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+    }
+    const text = String(value).trim();
+    if (!text) return '';
+    let m = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+    m = text.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
+    if (m) {
+        let year = m[3];
+        if (year.length === 2) year = (parseInt(year, 10) > 50 ? '19' : '20') + year;
+        return `${year}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    }
+    const parsed = new Date(text);
+    if (!isNaN(parsed)) return toLocalISODate(parsed);
+    return '';
+}
+
+function normalizePhone(value) {
+    let digits = String(value || '').replace(/\D/g, '');
+    if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);
+    if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+    return digits;
+}
+
+function isValidPhone(value) {
+    return /^[6-9]\d{9}$/.test(normalizePhone(value));
+}
+
+function escapeHtml(value) {
+    return String(value === null || value === undefined ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function entrySortValue(entry) {
+    if (!entry) return 0;
+    const ts = entry.timestamp;
+    if (ts) {
+        if (typeof ts.toMillis === 'function') return ts.toMillis();
+        if (typeof ts.seconds === 'number') return ts.seconds * 1000;
+        if (ts instanceof Date) return ts.getTime();
+        const parsedTs = new Date(ts).getTime();
+        if (!isNaN(parsedTs)) return parsedTs;
+    }
+    const iso = normalizeDateValue(entry.date);
+    if (iso) {
+        const parsed = new Date(`${iso}T00:00:00+05:30`).getTime();
+        if (!isNaN(parsed)) return parsed;
+    }
+    return 0;
+}
+
+function sortEntriesDesc(entries) {
+    return [...entries].sort((a, b) => entrySortValue(b) - entrySortValue(a));
+}
+
+function decorateEntry(entry) {
+    if (!entry || typeof entry !== 'object') return entry;
+    const out = { ...entry };
+    const num = (v) => {
+        if (v === null || v === undefined || v === '') return 0;
+        const n = Number(v);
+        return isFinite(n) ? n : 0;
+    };
+    const pick = (a, b) => (a !== undefined && a !== null && a !== '' ? a : b);
+
+    ['ic1', 'ic2'].forEach(key => {
+        const src = out[key] || {};
+        out[`${key}_voltage_max`] = num(pick(out[`${key}_voltage_max`], src.maxVoltage));
+        out[`${key}_voltage_min`] = num(pick(out[`${key}_voltage_min`], src.minVoltage));
+        out[`${key}_load_max`] = num(pick(out[`${key}_load_max`], src.maxLoad));
+        out[`${key}_load_min`] = num(pick(out[`${key}_load_min`], src.minLoad));
+        out[`${key}_max_time`] = pick(out[`${key}_max_time`], src.maxLoadTime || src.maxVoltageTime || '');
+        out[`${key}_min_time`] = pick(out[`${key}_min_time`], src.minLoadTime || src.minVoltageTime || '');
+    });
+
+    for (let i = 1; i <= 6; i++) {
+        const v33 = out[`ptr${i}_33kv`] || {};
+        const v11 = out[`ptr${i}_11kv`] || {};
+        out[`ptr${i}_33kv_voltage_max`] = num(pick(out[`ptr${i}_33kv_voltage_max`], v33.maxVoltage));
+        out[`ptr${i}_33kv_voltage_min`] = num(pick(out[`ptr${i}_33kv_voltage_min`], v33.minVoltage));
+        out[`ptr${i}_33kv_load_max`] = num(pick(out[`ptr${i}_33kv_load_max`], v33.maxLoad));
+        out[`ptr${i}_33kv_load_min`] = num(pick(out[`ptr${i}_33kv_load_min`], v33.minLoad));
+        out[`ptr${i}_11kv_voltage_max`] = num(pick(out[`ptr${i}_11kv_voltage_max`], v11.maxVoltage));
+        out[`ptr${i}_11kv_voltage_min`] = num(pick(out[`ptr${i}_11kv_voltage_min`], v11.minVoltage));
+        out[`ptr${i}_11kv_load_max`] = num(pick(out[`ptr${i}_11kv_load_max`], v11.maxLoad));
+        out[`ptr${i}_11kv_load_min`] = num(pick(out[`ptr${i}_11kv_load_min`], v11.minLoad));
+    }
+
+    const st = out.stationTransformer || {};
+    out.station_transformer_voltage_max = num(pick(out.station_transformer_voltage_max, st.maxVoltage));
+    out.station_transformer_voltage_min = num(pick(out.station_transformer_voltage_min, st.minVoltage));
+    out.station_transformer_load_max = num(pick(out.station_transformer_load_max, st.maxLoad));
+    out.station_transformer_load_min = num(pick(out.station_transformer_load_min, st.minLoad));
+
+    const ch = out.charger || {};
+    out.charger_voltage_max = num(pick(out.charger_voltage_max, ch.maxVoltage));
+    out.charger_voltage_min = num(pick(out.charger_voltage_min, ch.minVoltage));
+    out.charger_load_max = num(pick(out.charger_load_max, ch.maxLoad));
+    out.charger_load_min = num(pick(out.charger_load_min, ch.minLoad));
+
+    if (!out.date) out.date = normalizeDateValue(out.date);
+    if (!out.staffName) out.staffName = out.lineman || out.helper || '';
+    out._sortValue = entrySortValue(out);
+    return out;
+}
+
+function decorateEntries(entries) {
+    return sortEntriesDesc((entries || []).map(decorateEntry));
 }
 
 console.log('✅ App controller loaded');
