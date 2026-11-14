@@ -472,6 +472,13 @@ function getConfiguredIncomers(pssConfig) {
     return Array.from({ length: count }, (_, index) => ({ id: `ic${index + 1}`, name: `I/C-${index + 1}` }));
 }
 
+function getConfiguredPTRCount(pssConfig) {
+    const raw = pssConfig?.ptrCount ?? pssConfig?.ptr;
+    if (raw === undefined || raw === null || raw === '') return 2;
+    const count = Number(raw);
+    return Number.isInteger(count) && count >= 0 ? Math.min(count, 20) : 2;
+}
+
 function getEntryIncomers(entry) {
     if (!entry || typeof entry !== 'object') return [];
     const configured = getConfiguredIncomers(getPSSConfigFor(entry.pssStation));

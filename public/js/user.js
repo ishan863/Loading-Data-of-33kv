@@ -166,7 +166,6 @@ function calculateUserStatistics() {
         
         // PTR Data - Dynamic based on PSS configuration
         // Get PTR count from PSS config (default to 2 if not found)
-        let ptrCount = 2;
         const pssStation = appState.currentUser.pssStation;
         let pssData = appState.pssConfig[pssStation];
         
@@ -180,9 +179,7 @@ function calculateUserStatistics() {
             }
         }
         
-        if (pssData && pssData.ptrCount) {
-            ptrCount = pssData.ptrCount;
-        }
+        const ptrCount = getConfiguredPTRCount(pssData);
         
         // Generate PTR data array dynamically based on ptrCount
         const ptrData = [];
@@ -685,7 +682,7 @@ async function viewSubmissionDetails(submissionId) {
             <div style="margin-bottom: 1.5rem;">
                 <h3 style="color: #f59e0b; margin-bottom: 1rem; font-size: 18px;">${String.fromCodePoint(0x1F50B)} EQUIPMENT DATA</h3>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem;">
-                    ${renderEquipmentCard('Station Transformer', submission.stationTransformer)}
+                    ${renderEquipmentCard(`Station Transformer${submission.stationTransformer?.ptrNo ? ` (PTR ${submission.stationTransformer.ptrNo})` : ''}`, submission.stationTransformer)}
                     ${renderEquipmentCard('Charger (48/24V)', submission.charger)}
                 </div>
             </div>
@@ -1657,7 +1654,7 @@ function generatePTRSection() {
     }
     
     // Get PTR count from PSS configuration (default to 2)
-    const ptrCount = pssData?.ptrCount || 2;
+    const ptrCount = getConfiguredPTRCount(pssData);
     console.log('  ✅ PTR Count:', ptrCount);
     
     // Generate PTR sections dynamically based on ptrCount
@@ -1674,6 +1671,15 @@ function generatePTRSection() {
     
     // Initialize clock pickers for all time inputs
     setTimeout(() => initializeTimePickersInModal(), 100);
+}
+
+function buildPTROptions(ptrCount, selectedPtr = '') {
+    const selected = Number(selectedPtr);
+    let options = '<option value="">Select PTR</option>';
+    for (let i = 1; i <= ptrCount; i++) {
+        options += `<option value="${i}"${i === selected ? ' selected' : ''}>PTR ${i}</option>`;
+    }
+    return options;
 }
 
 function generateFeederSection() {
@@ -1731,17 +1737,17 @@ function generateFeederSection() {
     }
     
     // Get PTR count for dropdown options
-    const ptrCount = pssData?.ptrCount || 2;
-    let ptrOptions = '<option value="">Select PTR</option>';
-    for (let i = 1; i <= ptrCount; i++) {
-        ptrOptions += `<option value="${i}">PTR ${i}</option>`;
-    }
-    
+    const ptrCount = getConfiguredPTRCount(pssData);
     let html = `<p style="color: rgba(255,255,255,0.7); margin-bottom: 20px;">Configure ${feedersArray.length} feeders for ${pssStation} (${ptrCount} PTRs available)</p>`;
     
     feedersArray.forEach((feeder, index) => {
         // Ensure feeder is a string for display
         const feederName = typeof feeder === 'string' ? feeder : (feeder?.name || `Feeder-${index + 1}`);
+        const feederConfig = Array.isArray(pssData?.feeders) ? pssData.feeders[index] : null;
+        const savedPtr = typeof feederConfig === 'object' && feederConfig ? feederConfig.ptrNo : '';
+        const defaultPtr = savedPtr && Number(savedPtr) >= 1 && Number(savedPtr) <= ptrCount
+            ? Number(savedPtr)
+            : (ptrCount ? (index % ptrCount) + 1 : '');
         
         html += `
         <div class="equipment-section" style="background: rgba(59,130,246,0.1); border-radius: 16px; padding: 24px; margin-bottom: 20px; border: 2px solid rgba(59,130,246,0.3);">
@@ -1751,7 +1757,7 @@ function generateFeederSection() {
             <div style="margin-bottom: 16px;">
                 <label style="color: #a78bfa; font-weight: 600; font-size: 12px;">🔢 PTR NO (SELECT)</label>
                 <select id="feeder_${index}_ptr" class="form-control" style="border-left: 4px solid #a78bfa;">
-                    ${ptrOptions}
+                    ${buildPTROptions(ptrCount, defaultPtr)}
                 </select>
             </div>
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
@@ -1800,9 +1806,17 @@ function generateFeederSection() {
 
 function generateEquipmentSection() {
     const container = document.getElementById('equipmentContainer');
+    const ptrCount = getConfiguredPTRCount(getPSSConfigFor(getActivePSSStation()));
+    const ptrOptions = buildPTROptions(ptrCount);
     container.innerHTML = `
         <div style="margin-bottom: 30px;">
             <h4 style="color: #f59e0b; font-size: 18px; margin-bottom: 16px;">🔋 Station Transformer (33kv/0.415kv)</h4>
+            <div class="form-group" style="margin-bottom:16px;">
+                <label style="color:#a78bfa;font-weight:600;font-size:12px;">🔢 PTR NO (SELECT)</label>
+                <select id="station_transformer_ptr" class="form-control equipment-ptr-select" style="border-left:4px solid #a78bfa;">
+                    ${ptrOptions}
+                </select>
+            </div>
             ${createEquipmentSection('Station Transformer', 'station_transformer', '🔌')}
         </div>
         
@@ -1811,13 +1825,8 @@ function generateEquipmentSection() {
             <div class="equipment-section" style="background: rgba(168,85,247,0.1); border-radius: 16px; padding: 24px; margin-bottom: 20px; border: 2px solid rgba(168,85,247,0.3);">
                 <div style="margin-bottom: 16px;">
                     <label style="color: #a78bfa; font-weight: 600; font-size: 12px;">🔢 PTR NO (SELECT)</label>
-                    <select id="charger_ptr" class="form-control" style="border-left: 4px solid #a78bfa; background: rgba(168,85,247,0.15); color: #e9d5ff; border: 1px solid rgba(168,85,247,0.5); border-radius: 8px; padding: 10px 12px; font-size: 14px;">
-                        <option value="">Select PTR</option>
-                        <option value="1">PTR 1</option>
-                        <option value="2">PTR 2</option>
-                        <option value="3">PTR 3</option>
-                        <option value="4">PTR 4</option>
-                        <option value="5">PTR 5</option>
+                    <select id="charger_ptr" class="form-control equipment-ptr-select" style="border-left: 4px solid #a78bfa; background: rgba(168,85,247,0.15); color: #e9d5ff; border: 1px solid rgba(168,85,247,0.5); border-radius: 8px; padding: 10px 12px; font-size: 14px;">
+                        ${ptrOptions}
                     </select>
                 </div>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;">
@@ -1981,7 +1990,7 @@ function applyEditDataToCurrentStep() {
         const keys = new Set([...pssCircuits.map(c => c.id), ...Object.keys(data).filter(key => /^ic\d+$/.test(key))]);
         keys.forEach(key => fillEquipmentFields(key, data[key] || data.incomers?.[key]));
     } else if (currentWizardStep === 2) {
-        const ptrCount = Math.max(Number(getPSSConfigFor(getActivePSSStation())?.ptrCount) || 0, 6);
+        const ptrCount = getConfiguredPTRCount(getPSSConfigFor(getActivePSSStation()));
         for (let i = 1; i <= ptrCount; i++) {
             fillEquipmentFields(`ptr${i}_33kv`, data[`ptr${i}_33kv`]);
             fillEquipmentFields(`ptr${i}_11kv`, data[`ptr${i}_11kv`]);
@@ -2009,16 +2018,17 @@ function applyEditDataToCurrentStep() {
     } else if (currentWizardStep === 4) {
         fillEquipmentFields('station_transformer', data.stationTransformer);
         fillEquipmentFields('charger', data.charger);
+        const stationPtr = data.stationTransformer?.ptrNo || data.stationTransformer?.ptr;
+        const stationPtrSelect = document.getElementById('station_transformer_ptr');
+        if (stationPtrSelect && Array.from(stationPtrSelect.options).some(option => option.value === String(stationPtr))) {
+            stationPtrSelect.value = String(stationPtr);
+            stationPtrSelect.dispatchEvent(new Event('change', { bubbles: true }));
+        }
         const ptr = data.charger?.ptrNo || data.charger?.ptr;
         const select = document.getElementById('charger_ptr');
-        if (select && ptr) {
-            if (!select.querySelector(`option[value="${ptr}"]`)) {
-                const option = document.createElement('option');
-                option.value = ptr;
-                option.textContent = `PTR ${ptr}`;
-                select.appendChild(option);
-            }
-            select.value = ptr;
+        if (select && ptr && Array.from(select.options).some(option => option.value === String(ptr))) {
+            select.value = String(ptr);
+            select.dispatchEvent(new Event('change', { bubbles: true }));
         }
     }
 }
@@ -2131,7 +2141,7 @@ async function submitLoadingData() {
         });
         
         // 2. COLLECT PTR DATA (DYNAMIC based on ptrCount)
-        const ptrCount = pssData?.ptrCount || 2;
+        const ptrCount = getConfiguredPTRCount(pssData);
         console.log(`Collecting data for ${ptrCount} PTRs`);
         
         const ptrData = {};
@@ -2197,7 +2207,11 @@ async function submitLoadingData() {
         console.log('✅ Final feedersData:', feedersData);
         
         // 4. COLLECT STATION TRANSFORMER DATA
-        const stationTransformerData = collectEquipmentData('station_transformer');
+        const stationTransformerPtrNo = document.getElementById('station_transformer_ptr')?.value || '';
+        const stationTransformerData = {
+            ptrNo: stationTransformerPtrNo,
+            ...collectEquipmentData('station_transformer')
+        };
         
         // 5. COLLECT CHARGER DATA
         const chargerPtrNo = document.getElementById('charger_ptr')?.value || '';
@@ -2256,7 +2270,10 @@ async function submitLoadingData() {
         }
         console.log('✅ Document saved with ID:', docRef.id);
         
-        alert(`✅ Complete Loading Data Submitted Successfully!\n\n📊 Summary:\n• I/C Sections: ${icCircuits.length}\n• PTR Sections: ${ptrCount}\n• Feeders: ${feedersArray.length}\n• Total Max Load: ${totalMaxLoad.toFixed(2)} AMP\n• Total Min Load: ${totalMinLoad.toFixed(2)} AMP\n• Station Transformer: ✓\n• Charger: ✓`);
+        showUserNotification(
+            `${editingSubmissionId ? 'Loading data updated' : 'Loading data saved'} for ${pssStation}. ${icCircuits.length} incomers, ${ptrCount} PTRs, ${feedersArray.length} feeders; total max load ${totalMaxLoad.toFixed(2)} A and min load ${totalMinLoad.toFixed(2)} A.`,
+            'success'
+        );
         
         closeNewEntryForm();
         
@@ -2267,8 +2284,44 @@ async function submitLoadingData() {
         
     } catch (error) {
         console.error('❌ Error submitting data:', error);
-        alert('❌ Error submitting data: ' + error.message);
+        showUserNotification('Could not save loading data: ' + error.message, 'error');
     }
+}
+
+function showUserNotification(message, type = 'info') {
+    let region = document.getElementById('userToastRegion');
+    if (!region) {
+        region = document.createElement('div');
+        region.id = 'userToastRegion';
+        region.className = 'user-toast-region';
+        region.setAttribute('aria-live', 'polite');
+        region.setAttribute('aria-relevant', 'additions');
+        document.body.appendChild(region);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `user-toast user-toast-${type}`;
+    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    const icon = document.createElement('span');
+    icon.className = 'user-toast-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = type === 'success' ? '✓' : type === 'error' ? '!' : 'i';
+    const text = document.createElement('span');
+    text.className = 'user-toast-message';
+    text.textContent = message;
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'user-toast-close';
+    close.setAttribute('aria-label', 'Dismiss message');
+    close.textContent = '×';
+    close.addEventListener('click', () => toast.remove());
+    toast.append(icon, text, close);
+    region.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add('is-visible'));
+    setTimeout(() => {
+        toast.classList.remove('is-visible');
+        setTimeout(() => toast.remove(), 220);
+    }, type === 'error' ? 6500 : 4200);
 }
 
 // ============================================
@@ -2290,7 +2343,7 @@ async function updatePSSStats() {
             );
             if (pssKey) pssData = appState.pssConfig[pssKey];
         }
-        const ptrCount = pssData?.ptrCount || 2;
+        const ptrCount = getConfiguredPTRCount(pssData);
         
         // Query all submissions for this PSS, including legacy casing variants.
         const pssVariants = [...new Set([

@@ -90,6 +90,15 @@
     z-index: 9999; /* Very high to stay above everything */
 }
 
+/* PTR selectors expand in the form flow, so their menu never covers voltage inputs. */
+.equipment-ptr-select-container .custom-select-dropdown {
+    position: relative;
+    top: auto;
+    left: auto;
+    right: auto;
+    margin-top: 8px;
+}
+
 .custom-select-dropdown.open {
     max-height: 220px; /* 5 rows at ~44px each */
     opacity: 1;

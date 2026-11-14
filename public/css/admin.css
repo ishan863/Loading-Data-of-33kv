@@ -1783,3 +1783,60 @@ select[style*="display: none"] {
     background: rgba(255, 255, 255, 0.02);
     border: 1px dashed rgba(255, 255, 255, 0.1);
 }
+/* Non-blocking save and action feedback */
+.admin-toast-region {
+    position: fixed;
+    top: max(16px, env(safe-area-inset-top));
+    right: max(16px, env(safe-area-inset-right));
+    z-index: 30000;
+    display: grid;
+    gap: 10px;
+    width: min(420px, calc(100vw - 32px));
+    pointer-events: none;
+}
+
+.admin-toast {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) 30px;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 12px;
+    color: #f8fafc;
+    background: rgba(15, 23, 42, .97);
+    border: 1px solid rgba(148, 163, 184, .24);
+    border-left: 4px solid #38bdf8;
+    border-radius: 12px;
+    box-shadow: 0 16px 44px rgba(0, 0, 0, .38);
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: opacity .2s ease, transform .2s ease;
+    pointer-events: auto;
+}
+
+.admin-toast.is-visible { opacity: 1; transform: translateY(0); }
+.admin-toast-success { border-left-color: #34d399; }
+.admin-toast-error { border-left-color: #fb7185; }
+.admin-toast-icon {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    color: #7dd3fc;
+    background: rgba(56, 189, 248, .14);
+    border-radius: 50%;
+    font-weight: 800;
+}
+.admin-toast-success .admin-toast-icon { color: #6ee7b7; background: rgba(52, 211, 153, .14); }
+.admin-toast-error .admin-toast-icon { color: #fda4af; background: rgba(251, 113, 133, .14); }
+.admin-toast-message { font-size: 14px; line-height: 1.45; overflow-wrap: anywhere; }
+.admin-toast-close {
+    width: 30px;
+    height: 30px;
+    color: #cbd5e1;
+    background: transparent;
+    border: 0;
+    border-radius: 7px;
+    font-size: 22px;
+    cursor: pointer;
+}
+.admin-toast-close:hover { background: rgba(148, 163, 184, .14); }

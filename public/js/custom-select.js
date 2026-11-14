@@ -28,7 +28,7 @@ class CustomSelect {
         
         // Create container
         this.container = document.createElement('div');
-        this.container.className = 'custom-select-container';
+        this.container.className = `custom-select-container${this.select.classList.contains('equipment-ptr-select') ? ' equipment-ptr-select-container' : ''}`;
         
         // Prevent click events from bubbling up from container
         this.container.addEventListener('click', (e) => {

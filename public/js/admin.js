@@ -3187,9 +3187,9 @@ async function saveManagedUser() {
     const cascade = !!document.getElementById('muCascade')?.checked;
     const saveBtn = document.getElementById('manageUserSaveBtn');
 
-    if (!name) return alert('Please enter the full name.');
-    if (!isValidPhone(phone)) return alert('Enter a valid 10-digit Indian mobile number.');
-    if (role !== 'admin' && !pssStation) return alert('Please select the PSS station for this staff member.');
+    if (!name) return showNotification('Enter the user’s full name before saving.', 'error');
+    if (!isValidPhone(phone)) return showNotification('Enter a valid 10-digit mobile number.', 'error');
+    if (role !== 'admin' && !pssStation) return showNotification('Select a PSS station for this staff member.', 'error');
 
     const oldPhone = normalizePhone(user?.phoneNumber || user?.phone || '');
     saveBtn.disabled = true;
@@ -3235,10 +3235,10 @@ async function saveManagedUser() {
         await loadUsers();
         renderManageUsers();
         closeManageModal();
-        alert(`User saved.${cascadeResult.entries ? ` Updated ${cascadeResult.entries} daily entries.` : ''}`);
+        showNotification(`${name} saved.${cascadeResult.entries ? ` Updated ${cascadeResult.entries} daily entries.` : ''}`, 'success');
     } catch (error) {
         console.error('Save user error:', error);
-        alert('Could not save user: ' + error.message);
+        showNotification('Could not save user: ' + error.message, 'error');
     } finally {
         saveBtn.disabled = false;
         saveBtn.textContent = 'Save User';
@@ -3562,9 +3562,9 @@ async function saveManagedPSS() {
 
     const saveBtn = document.getElementById('managePSSSaveBtn');
 
-    if (!name) return alert('Please enter the PSS station name.');
-    if (!icCircuits.length) return alert('Keep at least one 33kV incomer configured for this PSS.');
-    if (new Set(icCircuits.map(c => c.name.toLowerCase())).size !== icCircuits.length) return alert('Incomer names must be unique within this PSS.');
+    if (!name) return showNotification('Enter a PSS station name before saving.', 'error');
+    if (!icCircuits.length) return showNotification('Keep at least one 33kV incomer configured for this PSS.', 'error');
+    if (new Set(icCircuits.map(c => c.name.toLowerCase())).size !== icCircuits.length) return showNotification('Incomer names must be unique within this PSS.', 'error');
 
     saveBtn.disabled = true;
     saveBtn.textContent = 'Saving...';
@@ -3614,10 +3614,10 @@ async function saveManagedPSS() {
         renderManagePSS();
         renderManageUsers();
         closeManageModal();
-        alert(renamed ? `PSS saved and renamed from "${oldName}" to "${name}".` : 'PSS station saved.');
+        showNotification(renamed ? `PSS station renamed to ${name} and saved.` : `${name} station saved. ${ptrCount} PTR${ptrCount === 1 ? '' : 's'}, ${icCircuits.length} incomer${icCircuits.length === 1 ? '' : 's'}, and ${feeders.length} feeder${feeders.length === 1 ? '' : 's'} configured.`, 'success');
     } catch (error) {
         console.error('Save PSS error:', error);
-        alert('Could not save PSS station: ' + error.message);
+        showNotification('Could not save PSS station: ' + error.message, 'error');
     } finally {
         saveBtn.disabled = false;
         saveBtn.textContent = 'Save PSS Station';
@@ -4099,8 +4099,39 @@ async function logAdminAction(action, details) {
 }
 
 function showNotification(message, type = 'info') {
-    // TODO: Implement toast notification system
-    console.log(`[${type.toUpperCase()}] ${message}`);
+    let region = document.getElementById('adminToastRegion');
+    if (!region) {
+        region = document.createElement('div');
+        region.id = 'adminToastRegion';
+        region.className = 'admin-toast-region';
+        region.setAttribute('aria-live', 'polite');
+        region.setAttribute('aria-relevant', 'additions');
+        document.body.appendChild(region);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `admin-toast admin-toast-${type}`;
+    toast.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    const icon = document.createElement('span');
+    icon.className = 'admin-toast-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = type === 'success' ? '✓' : type === 'error' ? '!' : 'i';
+    const text = document.createElement('span');
+    text.className = 'admin-toast-message';
+    text.textContent = message;
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'admin-toast-close';
+    close.setAttribute('aria-label', 'Dismiss message');
+    close.textContent = '×';
+    close.addEventListener('click', () => toast.remove());
+    toast.append(icon, text, close);
+    region.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add('is-visible'));
+    setTimeout(() => {
+        toast.classList.remove('is-visible');
+        setTimeout(() => toast.remove(), 220);
+    }, type === 'error' ? 6500 : 4200);
 }
 
 function debounce(func, wait) {
@@ -4487,7 +4518,8 @@ function renderDataBatch(batch) {
         // Station Transformer
         if (entry.stationTransformer) {
             dataDisplay += '<div style="margin-bottom: 10px; padding: 8px; background: rgba(245,158,11,0.1); border-left: 3px solid #f59e0b; border-radius: 4px;">';
-            dataDisplay += '<strong style="color: #fcd34d; font-size: 12px;">📊 STATION TRANSFORMER</strong><br/>';
+            const stationTransformerPtr = entry.stationTransformer.ptrNo || entry.stationTransformer.ptr;
+            dataDisplay += `<strong style="color: #fcd34d; font-size: 12px;">📊 STATION TRANSFORMER${stationTransformerPtr ? ` · PTR ${escapeHtml(stationTransformerPtr)}` : ''}</strong><br/>`;
             dataDisplay += `<div style="margin-top: 6px; padding-left: 8px; line-height: 1.6;">
                 <span style="color: rgba(255,255,255,0.9); font-size: 10px;">
                 Max: ${entry.stationTransformer.maxVoltage}KV @ ${entry.stationTransformer.maxVoltageTime}, ${entry.stationTransformer.maxLoad}A @ ${entry.stationTransformer.maxLoadTime}<br/>
@@ -4611,6 +4643,7 @@ async function exportToExcel() {
             'Station Transformer MAX LOAD (AMP)', 'Station Transformer MAX LOAD TIME',
             'Station Transformer MIN LOAD (AMP)', 'Station Transformer MIN LOAD TIME'
         );
+        headers.push('Station Transformer PTR No');
         
         // Charger (9 columns)
         headers.push(
@@ -4685,6 +4718,7 @@ async function exportToExcel() {
                 entry.stationTransformer?.maxLoad || '', entry.stationTransformer?.maxLoadTime || '',
                 entry.stationTransformer?.minLoad || '', entry.stationTransformer?.minLoadTime || ''
             );
+            row.push(entry.stationTransformer?.ptrNo || entry.stationTransformer?.ptr || '');
             
             // Charger
             row.push(
@@ -5076,7 +5110,7 @@ function viewEntryDetails(entryId) {
                 <div class="section-title">📊 STATION TRANSFORMER</div>
                 <div class="cards-grid">
                     <div class="data-card">
-                        <div class="card-title">Station Transformer</div>
+                        <div class="card-title">Station Transformer${entry.stationTransformer.ptrNo || entry.stationTransformer.ptr ? ` (PTR ${escapeHtml(entry.stationTransformer.ptrNo || entry.stationTransformer.ptr)})` : ''}</div>
                         <div class="data-row">
                             <div class="data-label"><span class="indicator indicator-red"></span> Max Voltage:</div>
                             <div class="data-value">${entry.stationTransformer.maxVoltage || 0} kV @ ${entry.stationTransformer.maxVoltageTime || '--:--'}</div>
@@ -5664,6 +5698,7 @@ function renderExcelStyleTable(data) {
                 <!-- Totals -->
                 <td style="padding: 10px 8px; text-align: center; font-weight: 700; font-size: 13px; color: #fcd34d; border: 2px solid #f59e0b; background: rgba(245,158,11,0.15);">${totalMaxLoad.toFixed(2)}</td>
                 <td style="padding: 10px 8px; text-align: center; font-weight: 700; font-size: 13px; color: #67e8f9; border: 2px solid #06b6d4; background: rgba(6,182,212,0.15);">${totalMinLoad.toFixed(2)}</td>
+                <td style="padding:10px 8px;text-align:center;border:1px solid rgba(245,158,11,.25);color:#fcd34d;font-weight:600;">${entry.stationTransformer?.ptrNo || entry.stationTransformer?.ptr || '-'}</td>
                 <td style="padding:10px 8px; border:1px solid rgba(239,68,68,.2); color:white;">${getEntryIncomers(entry).map(circuit => `${escapeHtml(circuit.name)}${Number(circuit.id.slice(2)) > 2 ? `: ${circuit.data ? `${circuit.data.maxVoltage ?? '-'}kV / ${circuit.data.maxLoad ?? '-'}A` : '-'}` : ''}`).join('<br>') || '-'}</td>
             </tr>
         `;
@@ -5738,6 +5773,7 @@ async function exportViewAllToExcel() {
             'Total Max Load (AMP)', 'Total Min Load (AMP)'
         ];
 
+        headers.push('Station Transformer PTR No');
         headers.push('33kV Incomer Names / Additional Data');
         
         const excelData = [headers];
@@ -5853,6 +5889,7 @@ async function exportViewAllToExcel() {
                 totalMaxLoad.toFixed(2),
                 totalMinLoad.toFixed(2)
             );
+            row.push(entry.stationTransformer?.ptrNo || entry.stationTransformer?.ptr || '');
             row.push(getEntryIncomers(entry).map(circuit => {
                 const value = circuit.data || {};
                 return `${circuit.name}${Number(circuit.id.slice(2)) > 2 ? `: Max ${value.maxVoltage ?? '-'}kV/${value.maxLoad ?? '-'}A, Min ${value.minVoltage ?? '-'}kV/${value.minLoad ?? '-'}A` : ''}`;
@@ -5999,15 +6036,15 @@ async function downloadLatestTemplate() {
         const getEquipmentData = (equipment) => {
             if (!equipment) return ['', '', '', '', '', '', '', '', ''];
             return [
-                equipment.ptr || '',
+                equipment.ptrNo ?? equipment.ptr ?? '',
                 equipment.maxVoltage || '',
                 equipment.maxVoltageTime || '',
                 equipment.minVoltage || '',
                 equipment.minVoltageTime || '',
-                equipment.maxCurrent || '',
-                equipment.maxCurrentTime || '',
-                equipment.minCurrent || '',
-                equipment.minCurrentTime || ''
+                equipment.maxLoad ?? equipment.maxCurrent ?? '',
+                equipment.maxLoadTime || equipment.maxCurrentTime || '',
+                equipment.minLoad ?? equipment.minCurrent ?? '',
+                equipment.minLoadTime || equipment.minCurrentTime || ''
             ];
         };
         
@@ -6324,15 +6361,15 @@ async function downloadLatestSubmissionTemplate() {
         const getEquipmentData = (equipment) => {
             if (!equipment) return ['', '', '', '', '', '', '', '', ''];
             return [
-                equipment.ptr || '',
+                equipment.ptrNo ?? equipment.ptr ?? '',
                 equipment.maxVoltage || '',
                 equipment.maxVoltageTime || '',
                 equipment.minVoltage || '',
                 equipment.minVoltageTime || '',
-                equipment.maxCurrent || '',
-                equipment.maxCurrentTime || '',
-                equipment.minCurrent || '',
-                equipment.minCurrentTime || ''
+                equipment.maxLoad ?? equipment.maxCurrent ?? '',
+                equipment.maxLoadTime || equipment.maxCurrentTime || '',
+                equipment.minLoad ?? equipment.minCurrent ?? '',
+                equipment.minLoadTime || equipment.minCurrentTime || ''
             ];
         };
         
@@ -6520,7 +6557,7 @@ async function savePSSAdminChanges() {
         const modifiedRows = document.querySelectorAll('#pss-admin-tbody .row-modified');
         
         if (modifiedRows.length === 0) {
-            alert('📊 No changes detected. Edit cells to make changes.');
+            showNotification('No changes to save. Edit a cell first.', 'info');
             return;
         }
         
@@ -6555,9 +6592,9 @@ async function savePSSAdminChanges() {
         }
         
         if (errors.length > 0) {
-            alert(`📊 Updated ${updateCount} records\n\nErrors (${errors.length}):\n${errors.join('\n')}`);
+            showNotification(`Saved ${updateCount} PSS admin records. ${errors.length} record${errors.length === 1 ? '' : 's'} could not be saved: ${errors.slice(0, 3).join('; ')}`, 'error');
         } else {
-            alert(`? Successfully updated ${updateCount} PSS admin records!`);
+            showNotification(`Saved ${updateCount} PSS admin record${updateCount === 1 ? '' : 's'}.`, 'success');
         }
         
         // Reload table
@@ -6565,7 +6602,7 @@ async function savePSSAdminChanges() {
         
     } catch (error) {
         console.error('Error saving changes:', error);
-        alert('? Error saving changes: ' + error.message);
+        showNotification('Could not save PSS admin changes: ' + error.message, 'error');
     }
 }
 
@@ -6703,7 +6740,7 @@ async function savePSSDetailsChanges() {
         const modifiedRows = document.querySelectorAll('#pss-details-tbody .row-modified');
         
         if (modifiedRows.length === 0) {
-            alert('📊 No changes detected. Edit cells to make changes.');
+            showNotification('No changes to save. Edit a cell first.', 'info');
             return;
         }
         
@@ -6746,9 +6783,9 @@ async function savePSSDetailsChanges() {
         }
         
         if (errors.length > 0) {
-            alert(`📊 Updated ${updateCount} records\n\nErrors (${errors.length}):\n${errors.join('\n')}`);
+            showNotification(`Saved ${updateCount} PSS detail records. ${errors.length} record${errors.length === 1 ? '' : 's'} could not be saved: ${errors.slice(0, 3).join('; ')}`, 'error');
         } else {
-            alert(`? Successfully updated ${updateCount} PSS detail records!`);
+            showNotification(`Saved ${updateCount} PSS detail record${updateCount === 1 ? '' : 's'}.`, 'success');
         }
         
         // Reload table
@@ -6756,7 +6793,7 @@ async function savePSSDetailsChanges() {
         
     } catch (error) {
         console.error('Error saving changes:', error);
-        alert('? Error saving changes: ' + error.message);
+        showNotification('Could not save PSS detail changes: ' + error.message, 'error');
     }
 }
 
@@ -7227,7 +7264,9 @@ function parseEquipmentReport(sheet) {
             const actualType = target.type === 'stationTransformer' ? 'stationTransformer' :
                 target.type === 'charger' ? 'charger' : target.type;
             entry[actualType] = { ...(entry[actualType] || {}), ...values };
-            if (actualType === 'charger') entry.charger.ptrNo = parseNumberValue(row[ptrCol]);
+            if ((actualType === 'charger' || actualType === 'stationTransformer') && ptrCol >= 0 && row[ptrCol] !== undefined && row[ptrCol] !== '') {
+                entry[actualType].ptrNo = parseNumberValue(row[ptrCol]);
+            }
         }
     }
 

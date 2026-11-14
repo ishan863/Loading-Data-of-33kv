@@ -1528,7 +1528,7 @@ function chatEquipmentLoads(record) {
         push(`PTR-${i} 11kV`, record[`ptr${i}_11kv`]);
     }
     chatFeederList(record).forEach(feeder => push(`Feeder ${feeder.name}`, feeder.data));
-    push('Station Transformer', record.stationTransformer);
+    push(`Station Transformer${record.stationTransformer?.ptrNo ? ` (PTR ${record.stationTransformer.ptrNo})` : ''}`, record.stationTransformer);
     push('Charger', record.charger);
     return items;
 }
@@ -1555,7 +1555,7 @@ function chatVoltagePoints(record) {
         push(`PTR-${i} 11kV`, record[`ptr${i}_11kv`]);
     }
     chatFeederList(record).forEach(feeder => push(`Feeder ${feeder.name}`, feeder.data));
-    push('Station Transformer', record.stationTransformer);
+    push(`Station Transformer${record.stationTransformer?.ptrNo ? ` (PTR ${record.stationTransformer.ptrNo})` : ''}`, record.stationTransformer);
     push('Charger', record.charger);
     return items;
 }
@@ -1658,7 +1658,7 @@ function chatFormatRecord(record) {
         lines.push(line);
     });
 
-    const stationLine = chatEquipmentLine('Station Transformer', record.stationTransformer);
+    const stationLine = chatEquipmentLine(`Station Transformer${record.stationTransformer?.ptrNo ? ` (PTR ${record.stationTransformer.ptrNo})` : ''}`, record.stationTransformer);
     if (stationLine) lines.push(stationLine);
     const chargerLine = chatEquipmentLine('Charger', record.charger);
     if (chargerLine) lines.push(chargerLine);
