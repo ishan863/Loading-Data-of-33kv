@@ -14,9 +14,10 @@ class CustomSelect {
     }
 
     init() {
-        // CRITICAL: Don't initialize custom select for feeder PTR dropdowns
-        if (this.select.id && this.select.id.includes('feeder')) {
-            console.log('Skipping custom select for feeder dropdown:', this.select.id);
+        // Keep circuit and equipment PTR selectors native. Native pickers behave
+        // better on touch devices and cannot cover nearby form fields.
+        if ((this.select.id && this.select.id.includes('feeder')) || this.select.classList.contains('equipment-ptr-select')) {
+            console.log('Skipping custom select for touch-friendly PTR dropdown:', this.select.id || this.select.className);
             return;
         }
         

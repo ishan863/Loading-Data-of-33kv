@@ -481,26 +481,24 @@ function renderSubmissionHistory() {
     
     // Create detailed table
     let html = `
-        <div style="overflow-x: auto; border-radius: 12px; background: rgba(255,255,255,0.03);">
-            <table style="width: 100%; border-collapse: collapse; min-width: 800px;">
+        <div class="recent-submissions-table-wrap">
+            <table class="recent-submissions-table">
                 <thead>
-                    <tr style="background: rgba(96,165,250,0.2); border-bottom: 2px solid rgba(96,165,250,0.3);">
-                        <th style="padding: 1rem; text-align: left; color: #60a5fa; font-weight: 600; font-size: 14px;">DATE</th>
-                        <th style="padding: 1rem; text-align: left; color: #60a5fa; font-weight: 600; font-size: 14px;">PSS STATION</th>
-                        <th style="padding: 1rem; text-align: left; color: #60a5fa; font-weight: 600; font-size: 14px;">STAFF</th>
-                        <th style="padding: 1rem; text-align: center; color: #60a5fa; font-weight: 600; font-size: 14px;">FEEDERS</th>
-                        <th style="padding: 1rem; text-align: right; color: #60a5fa; font-weight: 600; font-size: 14px;">TOTAL LOAD</th>
-                        <th style="padding: 1rem; text-align: center; color: #60a5fa; font-weight: 600; font-size: 14px;">TIME</th>
-                        <th style="padding: 1rem; text-align: center; color: #60a5fa; font-weight: 600; font-size: 14px;">ACTIONS</th>
+                    <tr>
+                        <th>Date</th>
+                        <th>PSS Station</th>
+                        <th>Staff</th>
+                        <th>Feeders</th>
+                        <th>Total Load</th>
+                        <th>Time</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
     `;
     
-    recentSubmissions.forEach((sub, index) => {
+    recentSubmissions.forEach((sub) => {
         const canEdit = isEditableSubmission(sub);
-        const bgColor = index % 2 === 0 ? 'rgba(255,255,255,0.02)' : 'rgba(255,255,255,0.05)';
-        
         // Calculate total load
         let totalMaxLoad = 0;
         let feederCount = 0;
@@ -514,46 +512,40 @@ function renderSubmissionHistory() {
         }
         
         html += `
-            <tr style="background: ${bgColor}; border-bottom: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;" 
-                onmouseover="this.style.background='rgba(96,165,250,0.1)'" 
-                onmouseout="this.style.background='${bgColor}'">
-                <td style="padding: 1rem; color: rgba(255,255,255,0.9); white-space: nowrap;">
+            <tr>
+                <td data-label="Date">
                     📅 ${formatDate(sub.date)}
                 </td>
-                <td style="padding: 1rem; color: rgba(255,255,255,0.9); font-weight: 500;">
+                <td data-label="PSS Station">
                     ${sub.pssStation}
                 </td>
-                <td style="padding: 1rem; color: rgba(255,255,255,0.8);">
+                <td data-label="Staff">
                     👤 ${sub.staffName}
                 </td>
-                <td style="padding: 1rem; text-align: center;">
+                <td data-label="Feeders">
                     <span style="background: rgba(59,130,246,0.2); color: #60a5fa; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 12px; font-weight: 600;">
                         ${sub.feederCount || feederCount} Feeders
                     </span>
                 </td>
-                <td style="padding: 1rem; text-align: right; color: #10b981; font-weight: 700; font-size: 16px;">
+                <td data-label="Total Load">
                     ${totalMaxLoad.toFixed(2)} A
                 </td>
-                <td style="padding: 1rem; text-align: center; color: rgba(255,255,255,0.7); font-size: 13px;">
+                <td data-label="Time">
                     🕐 ${formatTime(sub.timestamp)}
                 </td>
-                <td style="padding: 1rem; text-align: center;">
+                <td data-label="Actions" class="submission-actions-cell">
                     <button onclick="viewSubmissionDetails('${sub.id}')" 
-                        style="background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; border: none; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; margin-right: 0.5rem; transition: transform 0.2s;"
-                        onmouseover="this.style.transform='scale(1.05)'"
-                        onmouseout="this.style.transform='scale(1)'">
+                        class="submission-table-action action-view">
                         👁️ View
                     </button>
                     ${canEdit ? `
                         <button onclick="editMySubmission('${sub.id}')" 
-                            style="background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: transform 0.2s;"
-                            onmouseover="this.style.transform='scale(1.05)'"
-                            onmouseout="this.style.transform='scale(1)'">
+                            class="submission-table-action action-edit">
                             ✏️ Edit
                         </button>
                     ` : `
                         <button disabled 
-                            style="background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.3); border: none; padding: 0.5rem 1rem; border-radius: 8px; cursor: not-allowed; font-size: 13px; font-weight: 600;">
+                            class="submission-table-action action-locked">
                             🔒 Locked
                         </button>
                     `}
@@ -1811,7 +1803,7 @@ function generateEquipmentSection() {
     container.innerHTML = `
         <div style="margin-bottom: 30px;">
             <h4 style="color: #f59e0b; font-size: 18px; margin-bottom: 16px;">🔋 Station Transformer (33kv/0.415kv)</h4>
-            <div class="form-group" style="margin-bottom:16px;">
+            <div class="form-group equipment-ptr-group" style="margin-bottom:16px;">
                 <label style="color:#a78bfa;font-weight:600;font-size:12px;">🔢 PTR NO (SELECT)</label>
                 <select id="station_transformer_ptr" class="form-control equipment-ptr-select" style="border-left:4px solid #a78bfa;">
                     ${ptrOptions}
