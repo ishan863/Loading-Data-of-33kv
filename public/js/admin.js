@@ -469,10 +469,11 @@ function populateFilterDropdowns() {
 }
 
 function filterData(searchTerm) {
+    const query = String(searchTerm || '').toLowerCase();
     adminState.filteredSubmissions = adminState.allSubmissions.filter(submission => {
-        return submission.pssStation.toLowerCase().includes(searchTerm.toLowerCase()) ||
-               submission.personnelName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-               submission.date.includes(searchTerm);
+        return [submission.pssStation, submission.staffName, submission.personnelName, submission.phoneNumber, submission.date]
+            .filter(value => value !== undefined && value !== null)
+            .some(value => String(value).toLowerCase().includes(query));
     });
     adminState.currentPage = 1;
     renderDataTable();
@@ -780,6 +781,31 @@ function refreshAnalytics() {
 // ============================================
 // I/C LOAD ANALYSIS (Peak vs Min)
 // ============================================
+function getICChartDatasets(metric) {
+    const entries = adminState.allSubmissions || [];
+    const dates = [...new Set(entries.map(entry => entry.date).filter(Boolean))].sort().slice(-7);
+    const circuits = new Map();
+    entries.forEach(entry => getEntryIncomers(entry).forEach(circuit => {
+        if (circuit.data && !circuits.has(circuit.id)) circuits.set(circuit.id, circuit.name);
+    }));
+    const palette = ['#ef4444', '#f59e0b', '#8b5cf6', '#06b6d4', '#22c55e', '#ec4899', '#eab308', '#3b82f6'];
+    const datasets = [];
+    [...circuits.keys()].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2))).forEach((id, index) => {
+        const name = circuits.get(id) || `I/C-${id.slice(2)}`;
+        ['max', 'min'].forEach(bound => {
+            const data = dates.map(date => {
+                const readings = entries.filter(entry => entry.date === date)
+                    .map(entry => getEntryIncomers(entry).find(circuit => circuit.id === id)?.data?.[`${bound}${metric}`])
+                    .filter(value => value !== undefined && value !== null && value !== '' && Number.isFinite(Number(value)))
+                    .map(Number);
+                return readings.length ? readings.reduce((sum, value) => sum + value, 0) / readings.length : 0;
+            });
+            datasets.push({ data, color: bound === 'max' ? palette[index % palette.length] : `${palette[index % palette.length]}99`, label: `${name} ${bound === 'max' ? 'Max' : 'Min'}`, dash: bound === 'min' ? [5, 5] : [] });
+        });
+    });
+    return { dates, datasets };
+}
+
 function renderICLoadChart() {
     const canvas = document.getElementById('icLoadChart');
     if (!canvas) return;
@@ -787,30 +813,7 @@ function renderICLoadChart() {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Collect I/C data by date
-    const dateData = {};
-    adminState.allSubmissions.forEach(entry => {
-        const date = entry.date;
-        if (!dateData[date]) {
-            dateData[date] = { ic1Max: [], ic1Min: [], ic2Max: [], ic2Min: [] };
-        }
-        
-        if (entry.ic1) {
-            dateData[date].ic1Max.push(parseFloat(entry.ic1.maxLoad || 0));
-            dateData[date].ic1Min.push(parseFloat(entry.ic1.minLoad || 0));
-        }
-        if (entry.ic2) {
-            dateData[date].ic2Max.push(parseFloat(entry.ic2.maxLoad || 0));
-            dateData[date].ic2Min.push(parseFloat(entry.ic2.minLoad || 0));
-        }
-    });
-    
-    // Get last 7 days
-    const dates = Object.keys(dateData).sort().slice(-7);
-    const ic1MaxAvg = dates.map(d => dateData[d].ic1Max.length > 0 ? dateData[d].ic1Max.reduce((a,b) => a+b, 0) / dateData[d].ic1Max.length : 0);
-    const ic1MinAvg = dates.map(d => dateData[d].ic1Min.length > 0 ? dateData[d].ic1Min.reduce((a,b) => a+b, 0) / dateData[d].ic1Min.length : 0);
-    const ic2MaxAvg = dates.map(d => dateData[d].ic2Max.length > 0 ? dateData[d].ic2Max.reduce((a,b) => a+b, 0) / dateData[d].ic2Max.length : 0);
-    const ic2MinAvg = dates.map(d => dateData[d].ic2Min.length > 0 ? dateData[d].ic2Min.reduce((a,b) => a+b, 0) / dateData[d].ic2Min.length : 0);
+    const { dates, datasets } = getICChartDatasets('Load');
     
     if (dates.length === 0) {
         ctx.fillStyle = 'rgba(255,255,255,0.5)';
@@ -826,7 +829,7 @@ function renderICLoadChart() {
     const chartHeight = canvas.height - padding.top - padding.bottom;
     
     // Find max value for scaling
-    const allValues = [...ic1MaxAvg, ...ic2MaxAvg, ...ic1MinAvg, ...ic2MinAvg];
+    const allValues = datasets.flatMap(dataset => dataset.data);
     const maxValue = Math.max(...allValues, 100);
     
     // Draw grid lines
@@ -848,13 +851,6 @@ function renderICLoadChart() {
     }
     
     // Draw lines
-    const datasets = [
-        { data: ic1MaxAvg, color: '#ef4444', label: 'I/C-1 Peak', dash: [] },
-        { data: ic1MinAvg, color: '#fca5a5', label: 'I/C-1 Min', dash: [5, 5] },
-        { data: ic2MaxAvg, color: '#dc2626', label: 'I/C-2 Peak', dash: [] },
-        { data: ic2MinAvg, color: '#f87171', label: 'I/C-2 Min', dash: [5, 5] }
-    ];
-    
     datasets.forEach(dataset => {
         ctx.strokeStyle = dataset.color;
         ctx.lineWidth = 3;
@@ -951,29 +947,7 @@ function renderICVoltageChart() {
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Collect voltage data
-    const dateData = {};
-    adminState.allSubmissions.forEach(entry => {
-        const date = entry.date;
-        if (!dateData[date]) {
-            dateData[date] = { ic1Max: [], ic1Min: [], ic2Max: [], ic2Min: [] };
-        }
-        
-        if (entry.ic1) {
-            dateData[date].ic1Max.push(parseFloat(entry.ic1.maxVoltage || 0));
-            dateData[date].ic1Min.push(parseFloat(entry.ic1.minVoltage || 0));
-        }
-        if (entry.ic2) {
-            dateData[date].ic2Max.push(parseFloat(entry.ic2.maxVoltage || 0));
-            dateData[date].ic2Min.push(parseFloat(entry.ic2.minVoltage || 0));
-        }
-    });
-    
-    const dates = Object.keys(dateData).sort().slice(-7);
-    const ic1MaxAvg = dates.map(d => dateData[d].ic1Max.length > 0 ? dateData[d].ic1Max.reduce((a,b) => a+b, 0) / dateData[d].ic1Max.length : 0);
-    const ic1MinAvg = dates.map(d => dateData[d].ic1Min.length > 0 ? dateData[d].ic1Min.reduce((a,b) => a+b, 0) / dateData[d].ic1Min.length : 0);
-    const ic2MaxAvg = dates.map(d => dateData[d].ic2Max.length > 0 ? dateData[d].ic2Max.reduce((a,b) => a+b, 0) / dateData[d].ic2Max.length : 0);
-    const ic2MinAvg = dates.map(d => dateData[d].ic2Min.length > 0 ? dateData[d].ic2Min.reduce((a,b) => a+b, 0) / dateData[d].ic2Min.length : 0);
+    const { dates, datasets } = getICChartDatasets('Voltage');
     
     if (dates.length === 0) {
         ctx.fillStyle = 'rgba(255,255,255,0.5)';
@@ -1025,13 +999,6 @@ function renderICVoltageChart() {
     }
     
     // Draw voltage lines
-    const datasets = [
-        { data: ic1MaxAvg, color: '#ef4444', label: 'I/C-1 Max' },
-        { data: ic1MinAvg, color: '#93c5fd', label: 'I/C-1 Min' },
-        { data: ic2MaxAvg, color: '#f59e0b', label: 'I/C-2 Max' },
-        { data: ic2MinAvg, color: '#67e8f9', label: 'I/C-2 Min' }
-    ];
-    
     datasets.forEach(dataset => {
         ctx.strokeStyle = dataset.color;
         ctx.lineWidth = 2.5;
@@ -1621,7 +1588,7 @@ function renderPeakTimeChart() {
     
     adminState.allSubmissions.forEach(entry => {
         // I/C times
-        [entry.ic1, entry.ic2].forEach(ic => {
+        getEntryIncomers(entry).map(circuit => circuit.data).forEach(ic => {
             if (ic?.maxLoadTime) {
                 const hour = parseInt(ic.maxLoadTime.split(':')[0]);
                 if (!isNaN(hour)) hourCounts[hour]++;
@@ -1717,7 +1684,7 @@ function renderDailyLoadTrendChart() {
         }
         
         // Sum all loads
-        [entry.ic1, entry.ic2].forEach(ic => {
+        getEntryIncomers(entry).map(circuit => circuit.data).forEach(ic => {
             if (ic?.maxLoad) dateLoads[date] += parseFloat(ic.maxLoad);
         });
         
@@ -1860,7 +1827,7 @@ function renderVoltageComplianceChart() {
     
     adminState.allSubmissions.forEach(entry => {
         // I/C
-        [entry.ic1, entry.ic2].forEach(ic => {
+        getEntryIncomers(entry).map(circuit => circuit.data).forEach(ic => {
             if (ic) {
                 [ic.maxVoltage, ic.minVoltage].forEach(v => {
                     const val = parseFloat(v || 0);
@@ -1977,7 +1944,7 @@ function renderPSSComparisonChart() {
         
         let entryLoad = 0;
         
-        [entry.ic1, entry.ic2].forEach(ic => {
+        getEntryIncomers(entry).map(circuit => circuit.data).forEach(ic => {
             if (ic?.maxLoad) entryLoad += parseFloat(ic.maxLoad);
         });
         
@@ -2070,10 +2037,10 @@ function renderSummaryStats() {
     adminState.allSubmissions.forEach(entry => {
         let entryLoad = 0;
         
-        if (entry.ic1 || entry.ic2) totalICReadings++;
+        if (getEntryIncomers(entry).some(circuit => circuit.data)) totalICReadings++;
         if (entry.ptr1_33kv || entry.ptr2_33kv || entry.ptr1_11kv || entry.ptr2_11kv) totalPTRReadings++;
         
-        [entry.ic1, entry.ic2].forEach(ic => {
+        getEntryIncomers(entry).map(circuit => circuit.data).forEach(ic => {
             if (ic?.maxLoad) entryLoad += parseFloat(ic.maxLoad);
         });
         
@@ -2451,14 +2418,11 @@ function renderVoltageStatsChart() {
     const voltages = { ic: [], ptr33: [], ptr11: [] };
     
     adminState.allSubmissions.forEach(entry => {
-        if (entry.ic1) {
-            voltages.ic.push(parseFloat(entry.ic1.maxVoltage || 0));
-            voltages.ic.push(parseFloat(entry.ic1.minVoltage || 0));
-        }
-        if (entry.ic2) {
-            voltages.ic.push(parseFloat(entry.ic2.maxVoltage || 0));
-            voltages.ic.push(parseFloat(entry.ic2.minVoltage || 0));
-        }
+        getEntryIncomers(entry).forEach(({ data }) => {
+            if (!data) return;
+            voltages.ic.push(parseFloat(data.maxVoltage || 0));
+            voltages.ic.push(parseFloat(data.minVoltage || 0));
+        });
         if (entry.ptr1_33kv) {
             voltages.ptr33.push(parseFloat(entry.ptr1_33kv.maxVoltage || 0));
             voltages.ptr33.push(parseFloat(entry.ptr1_33kv.minVoltage || 0));
@@ -2965,6 +2929,14 @@ function startRealTimeListeners() {
     const unsubscribePSS = db.collection('pss_stations')
         .onSnapshot(snapshot => {
             adminState.pssStations = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            appState.pssConfig = {};
+            adminState.pssStations.forEach(pss => {
+                const config = { ...pss };
+                delete config.id;
+                appState.pssConfig[pss.id] = config;
+                const name = String(config.name || pss.id).trim();
+                if (name && !appState.pssConfig[name]) appState.pssConfig[name] = config;
+            });
             if (adminState.currentWindow === 'manage') renderManagePSS();
         }, error => console.error('Realtime PSS listener error:', error));
     adminState.unsubscribeListeners.push(unsubscribePSS);
@@ -3081,6 +3053,8 @@ function renderManagePSS() {
 
     body.innerHTML = list.map(pss => {
         const feederCount = pss.feederCount || (Array.isArray(pss.feeders) ? pss.feeders.length : Number(pss.feeders) || 0);
+        const incomerCount = getConfiguredIncomers(pss).length;
+        const incomerNames = getConfiguredIncomers(pss).map(circuit => escapeHtml(circuit.name)).join(', ');
         const rawLinemen = pss.linemen || pss.lineman || [];
         const rawHelpers = pss.helpers || pss.helper || [];
         const linemen = Array.isArray(rawLinemen) ? rawLinemen.join(', ') : String(rawLinemen || '');
@@ -3096,11 +3070,13 @@ function renderManagePSS() {
                     <div class="card-item-fields">
                         <span class="card-item-field"><span class="card-item-label">PTR</span> ${Number(pss.ptrCount || pss.ptr || 0) || '-'}</span>
                         <span class="card-item-field"><span class="card-item-label">Feeders</span> ${feederCount || '-'}</span>
+                        <span class="card-item-field"><span class="card-item-label">33kV I/C</span> ${incomerCount}</span>
                     </div>
                 </div>
                 <div class="card-item-row">
                     <span class="card-item-field"><span class="card-item-label">Linemen</span> ${escapeHtml(linemen || '-')}</span>
                     <span class="card-item-field"><span class="card-item-label">Helpers</span> ${escapeHtml(helpers || '-')}</span>
+                    <span class="card-item-field"><span class="card-item-label">33kV Incomers</span> ${incomerNames || '-'}</span>
                 </div>
                 <div class="card-item-actions">
                     <button class="btn-action" data-action="edit-pss" data-id="${escapeHtml(pss.id)}" style="background:#3b82f6; margin-right:6px;">Edit</button>
@@ -3331,6 +3307,8 @@ function openManagedPSSEditor(pssId) {
     const existingCircle = String(pss?.circle || '').trim();
     const existingDivision = String(pss?.division || '').trim();
     const existingPtrCount = Number(pss?.ptrCount || pss?.ptr || 0);
+    const existingIncomers = getConfiguredIncomers(pss);
+    const nextIncomerId = Math.max(Number(pss?.icNextId) || 1, ...existingIncomers.map(circuit => Number(circuit.id.slice(2)) + 1));
 
     const existingFeeders = Array.isArray(pss?.feeders) ? pss.feeders : [];
     const existingLinemen = Array.isArray(pss?.linemen || pss?.lineman) ? (pss.linemen || pss.lineman) : [];
@@ -3352,6 +3330,18 @@ function openManagedPSSEditor(pssId) {
             </div>
         `;
     }).join('') || '<div class="empty-list">No feeders added. Click "Add Feeder" to add one.</div>';
+
+    const incomerCardsHtml = existingIncomers.map((circuit, idx) => `
+        <div class="card-item incomer-card" data-incomer-id="${escapeHtmlAttr(circuit.id)}">
+            <div class="card-item-header">
+                <span class="card-item-badge">33kV I/C ${idx + 1}</span>
+                <button type="button" class="card-remove" onclick="this.closest('.incomer-card').remove()" title="Remove incomer">×</button>
+            </div>
+            <div class="card-item-row">
+                <input type="text" class="card-input incomer-name" value="${escapeHtmlAttr(circuit.name)}" placeholder="Incomer name" aria-label="Incomer ${idx + 1} name">
+            </div>
+        </div>
+    `).join('');
 
     const linemenCardsHtml = existingLinemen.map((name, idx) => {
         const n = String(name).trim();
@@ -3407,6 +3397,15 @@ function openManagedPSSEditor(pssId) {
 
             <div class="card-section">
                 <div class="card-section-header">
+                    <label>33kV Incomers</label>
+                    <button type="button" class="btn-add-card" onclick="addCardItem('incomers', 'incomer')">+ Add Incomer</button>
+                </div>
+                <p style="font-size:12px;color:rgba(255,255,255,.65);margin:0 0 .75rem;">Add, rename, or remove incoming circuits for this PSS.</p>
+                <div id="incomers-container" data-next-id="${nextIncomerId}">${incomerCardsHtml}</div>
+            </div>
+
+            <div class="card-section">
+                <div class="card-section-header">
                     <label>Feeders</label>
                     <button type="button" class="btn-add-card" onclick="addCardItem('feeders', 'feeder')">+ Add Feeder</button>
                 </div>
@@ -3455,6 +3454,24 @@ window.addCardItem = function addCardItem(containerType, itemType) {
                 </div>
             </div>
         `;
+    } else if (itemType === 'incomer') {
+        const usedIds = new Set(Array.from(container.querySelectorAll('.incomer-card'), card => card.dataset.incomerId));
+        let circuitNumber = Number(container.dataset.nextId) || 1;
+        while (usedIds.has(`ic${circuitNumber}`)) circuitNumber++;
+        container.dataset.nextId = String(circuitNumber + 1);
+        const nextNumber = container.querySelectorAll('.incomer-card').length + 1;
+        container.insertAdjacentHTML('beforeend', `
+            <div class="card-item incomer-card" data-incomer-id="ic${circuitNumber}">
+                <div class="card-item-header">
+                    <span class="card-item-badge">33kV I/C ${nextNumber}</span>
+                    <button type="button" class="card-remove" onclick="this.closest('.incomer-card').remove()" title="Remove incomer">×</button>
+                </div>
+                <div class="card-item-row">
+                    <input type="text" class="card-input incomer-name" value="I/C-${circuitNumber}" placeholder="Incomer name" aria-label="Incomer name">
+                </div>
+            </div>
+        `);
+        return;
     } else if (itemType === 'lineman') {
         html = `
             <div class="card-item" id="lineman-card-${idx}">
@@ -3502,6 +3519,11 @@ async function saveManagedPSS() {
     const circle = (document.getElementById('mpCircle')?.value || '').trim();
     const division = (document.getElementById('mpDivision')?.value || '').trim();
     const ptrCount = parseInt(document.getElementById('mpPtrCount')?.value, 10) || 0;
+    const incomerCards = Array.from(document.querySelectorAll('#incomers-container .incomer-card'));
+    const icCircuits = incomerCards.map((card, index) => ({
+        id: card.dataset.incomerId || `ic${index + 1}`,
+        name: (card.querySelector('.incomer-name')?.value || '').trim()
+    })).filter(circuit => circuit.name);
 
     // Collect feeders from card inputs
     const feeders = [];
@@ -3541,6 +3563,8 @@ async function saveManagedPSS() {
     const saveBtn = document.getElementById('managePSSSaveBtn');
 
     if (!name) return alert('Please enter the PSS station name.');
+    if (!icCircuits.length) return alert('Keep at least one 33kV incomer configured for this PSS.');
+    if (new Set(icCircuits.map(c => c.name.toLowerCase())).size !== icCircuits.length) return alert('Incomer names must be unique within this PSS.');
 
     saveBtn.disabled = true;
     saveBtn.textContent = 'Saving...';
@@ -3559,6 +3583,9 @@ async function saveManagedPSS() {
             circle,
             division,
             ptrCount,
+            icCircuits,
+            incomerCount: icCircuits.length,
+            icNextId: Math.max(Number(document.getElementById('incomers-container')?.dataset.nextId) || 1, ...icCircuits.map(circuit => Number(circuit.id.slice(2)) + 1)),
             feederCount: feeders.length,
             feeders,
             linemen,
@@ -3570,6 +3597,8 @@ async function saveManagedPSS() {
         };
 
         await db.collection('pss_stations').doc(newDocId).set(payload, { merge: true });
+        appState.pssConfig[newDocId] = payload;
+        appState.pssConfig[name] = payload;
 
         const renamed = !!id && oldName && oldName !== name;
         if (renamed) {
@@ -4384,27 +4413,13 @@ function renderDataBatch(batch) {
         let dataDisplay = '<div style="font-size: 11px; max-height: 350px; overflow: auto; padding: 8px;">';
         
         // I/C Sections
-        if (entry.ic1 || entry.ic2) {
+        const incomers = getEntryIncomers(entry).filter(circuit => circuit.data);
+        if (incomers.length) {
             dataDisplay += '<div style="margin-bottom: 10px; padding: 8px; background: rgba(239,68,68,0.1); border-left: 3px solid #ef4444; border-radius: 4px;">';
             dataDisplay += '<strong style="color: #fca5a5; font-size: 12px;">📊 I/C SECTIONS</strong><br/>';
-            if (entry.ic1) {
-                dataDisplay += `<div style="margin-top: 6px; padding-left: 8px; line-height: 1.6;">
-                    <strong style="color: #fca5a5;">I/C-1:</strong><br/>
-                    <span style="color: rgba(255,255,255,0.9);">
-                    Max: ${entry.ic1.maxVoltage}KV @ ${entry.ic1.maxVoltageTime}, ${entry.ic1.maxLoad}A @ ${entry.ic1.maxLoadTime}<br/>
-                    Min: ${entry.ic1.minVoltage}KV @ ${entry.ic1.minVoltageTime}, ${entry.ic1.minLoad}A @ ${entry.ic1.minLoadTime}
-                    </span>
-                </div>`;
-            }
-            if (entry.ic2) {
-                dataDisplay += `<div style="margin-top: 6px; padding-left: 8px; line-height: 1.6;">
-                    <strong style="color: #fca5a5;">I/C-2:</strong><br/>
-                    <span style="color: rgba(255,255,255,0.9);">
-                    Max: ${entry.ic2.maxVoltage}KV @ ${entry.ic2.maxVoltageTime}, ${entry.ic2.maxLoad}A @ ${entry.ic2.maxLoadTime}<br/>
-                    Min: ${entry.ic2.minVoltage}KV @ ${entry.ic2.minVoltageTime}, ${entry.ic2.minLoad}A @ ${entry.ic2.minLoadTime}
-                    </span>
-                </div>`;
-            }
+            incomers.forEach(({ name, data }) => {
+                dataDisplay += `<div style="margin-top:6px;padding-left:8px;line-height:1.6;"><strong style="color:#fca5a5;">${escapeHtml(name)}:</strong><br/><span style="color:rgba(255,255,255,.9);">Max: ${data.maxVoltage ?? 0}KV @ ${data.maxVoltageTime || '--:--'}, ${data.maxLoad ?? 0}A @ ${data.maxLoadTime || '--:--'}<br/>Min: ${data.minVoltage ?? 0}KV @ ${data.minVoltageTime || '--:--'}, ${data.minLoad ?? 0}A @ ${data.minLoadTime || '--:--'}</span></div>`;
+            });
             dataDisplay += '</div>';
         }
         
@@ -4607,6 +4622,7 @@ async function exportToExcel() {
         );
         
         headers.push('Total Max Load (AMP)', 'Total Min Load (AMP)', 'Feeder Count');
+        headers.push('33kV Incomer Names / Additional Data');
         
         const excelData = [headers];
         
@@ -4684,6 +4700,10 @@ async function exportToExcel() {
                 entry.totalMinLoad || 0,
                 entry.feederCount || Object.keys(entry.feeders || {}).length
             );
+            row.push(getEntryIncomers(entry).map(circuit => {
+                const value = circuit.data || {};
+                return `${circuit.name}${Number(circuit.id.slice(2)) > 2 ? `: Max ${value.maxVoltage ?? '-'}kV/${value.maxLoad ?? '-'}A, Min ${value.minVoltage ?? '-'}kV/${value.minLoad ?? '-'}A` : ''}`;
+            }).join(' | '));
             
             excelData.push(row);
         });
@@ -4944,57 +4964,20 @@ function viewEntryDetails(entryId) {
         <div class="modal-body-details">`;
     
     // I/C Sections
-    if (entry.ic1 || entry.ic2) {
+    const incomers = getEntryIncomers(entry).filter(circuit => circuit.data);
+    if (incomers.length) {
         html += `
             <div class="data-section">
                 <div class="section-title">${String.fromCodePoint(0x26A1)} INCOMING (I/C) DATA</div>
                 <div class="cards-grid">`;
         
-        if (entry.ic1) {
-            html += `
-                <div class="data-card">
-                    <div class="card-title">I/C-1</div>
-                    <div class="data-row">
-                        <div class="data-label"><span class="indicator indicator-red"></span> Max Voltage:</div>
-                        <div class="data-value">${entry.ic1.maxVoltage || 0} kV @ ${entry.ic1.maxVoltageTime || '--:--'}</div>
-                    </div>
-                    <div class="data-row">
-                        <div class="data-label"><span class="indicator indicator-blue"></span> Min Voltage:</div>
-                        <div class="data-value">${entry.ic1.minVoltage || 0} kV @ ${entry.ic1.minVoltageTime || '--:--'}</div>
-                    </div>
-                    <div class="data-row">
-                        <div class="data-label"><span class="indicator indicator-orange"></span> Max Load:</div>
-                        <div class="data-value">${entry.ic1.maxLoad || 0} A @ ${entry.ic1.maxLoadTime || '--:--'}</div>
-                    </div>
-                    <div class="data-row">
-                        <div class="data-label"><span class="indicator indicator-cyan"></span> Min Load:</div>
-                        <div class="data-value">${entry.ic1.minLoad || 0} A @ ${entry.ic1.minLoadTime || '--:--'}</div>
-                    </div>
-                </div>`;
-        }
-        
-        if (entry.ic2) {
-            html += `
-                <div class="data-card">
-                    <div class="card-title">I/C-2</div>
-                    <div class="data-row">
-                        <div class="data-label"><span class="indicator indicator-red"></span> Max Voltage:</div>
-                        <div class="data-value">${entry.ic2.maxVoltage || 0} kV @ ${entry.ic2.maxVoltageTime || '--:--'}</div>
-                    </div>
-                    <div class="data-row">
-                        <div class="data-label"><span class="indicator indicator-blue"></span> Min Voltage:</div>
-                        <div class="data-value">${entry.ic2.minVoltage || 0} kV @ ${entry.ic2.minVoltageTime || '--:--'}</div>
-                    </div>
-                    <div class="data-row">
-                        <div class="data-label"><span class="indicator indicator-orange"></span> Max Load:</div>
-                        <div class="data-value">${entry.ic2.maxLoad || 0} A @ ${entry.ic2.maxLoadTime || '--:--'}</div>
-                    </div>
-                    <div class="data-row">
-                        <div class="data-label"><span class="indicator indicator-cyan"></span> Min Load:</div>
-                        <div class="data-value">${entry.ic2.minLoad || 0} A @ ${entry.ic2.minLoadTime || '--:--'}</div>
-                    </div>
-                </div>`;
-        }
+        incomers.forEach(({ name, data }) => {
+            html += `<div class="data-card"><div class="card-title">${escapeHtml(name)}</div>
+                <div class="data-row"><div class="data-label"><span class="indicator indicator-red"></span> Max Voltage:</div><div class="data-value">${data.maxVoltage ?? 0} kV @ ${data.maxVoltageTime || '--:--'}</div></div>
+                <div class="data-row"><div class="data-label"><span class="indicator indicator-blue"></span> Min Voltage:</div><div class="data-value">${data.minVoltage ?? 0} kV @ ${data.minVoltageTime || '--:--'}</div></div>
+                <div class="data-row"><div class="data-label"><span class="indicator indicator-orange"></span> Max Load:</div><div class="data-value">${data.maxLoad ?? 0} A @ ${data.maxLoadTime || '--:--'}</div></div>
+                <div class="data-row"><div class="data-label"><span class="indicator indicator-cyan"></span> Min Load:</div><div class="data-value">${data.minLoad ?? 0} A @ ${data.minLoadTime || '--:--'}</div></div></div>`;
+        });
         
         html += `</div></div>`;
     }
@@ -5681,6 +5664,7 @@ function renderExcelStyleTable(data) {
                 <!-- Totals -->
                 <td style="padding: 10px 8px; text-align: center; font-weight: 700; font-size: 13px; color: #fcd34d; border: 2px solid #f59e0b; background: rgba(245,158,11,0.15);">${totalMaxLoad.toFixed(2)}</td>
                 <td style="padding: 10px 8px; text-align: center; font-weight: 700; font-size: 13px; color: #67e8f9; border: 2px solid #06b6d4; background: rgba(6,182,212,0.15);">${totalMinLoad.toFixed(2)}</td>
+                <td style="padding:10px 8px; border:1px solid rgba(239,68,68,.2); color:white;">${getEntryIncomers(entry).map(circuit => `${escapeHtml(circuit.name)}${Number(circuit.id.slice(2)) > 2 ? `: ${circuit.data ? `${circuit.data.maxVoltage ?? '-'}kV / ${circuit.data.maxLoad ?? '-'}A` : '-'}` : ''}`).join('<br>') || '-'}</td>
             </tr>
         `;
         
@@ -5753,6 +5737,8 @@ async function exportViewAllToExcel() {
             'CHARGER 48/24V  LOAD (AMP)', 'CHARGER 48/24V  MIN LOAD (AMP)  TIME',
             'Total Max Load (AMP)', 'Total Min Load (AMP)'
         ];
+
+        headers.push('33kV Incomer Names / Additional Data');
         
         const excelData = [headers];
         
@@ -5867,6 +5853,10 @@ async function exportViewAllToExcel() {
                 totalMaxLoad.toFixed(2),
                 totalMinLoad.toFixed(2)
             );
+            row.push(getEntryIncomers(entry).map(circuit => {
+                const value = circuit.data || {};
+                return `${circuit.name}${Number(circuit.id.slice(2)) > 2 ? `: Max ${value.maxVoltage ?? '-'}kV/${value.maxLoad ?? '-'}A, Min ${value.minVoltage ?? '-'}kV/${value.minLoad ?? '-'}A` : ''}`;
+            }).join(' | '));
             
             excelData.push(row);
         });

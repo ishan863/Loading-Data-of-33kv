@@ -226,12 +226,13 @@ function calculateKPIs(submissions) {
     document.querySelector('#kpi-top-staff .kpi-value').textContent = topStaff || 'N/A';
     
     // Average Voltage
+    const incomerKeys = [...new Set(submissions.flatMap(s => Object.keys(s).filter(key => /^ic\d+_voltage_max$/.test(key)).map(key => key.replace('_voltage_max', ''))))].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)));
     let voltageSum = 0, voltageCount = 0;
     submissions.forEach(s => {
-        if (s.ic1_voltage_max) { voltageSum += s.ic1_voltage_max; voltageCount++; }
-        if (s.ic1_voltage_min) { voltageSum += s.ic1_voltage_min; voltageCount++; }
-        if (s.ic2_voltage_max) { voltageSum += s.ic2_voltage_max; voltageCount++; }
-        if (s.ic2_voltage_min) { voltageSum += s.ic2_voltage_min; voltageCount++; }
+        incomerKeys.forEach(key => {
+            if (s[`${key}_voltage_max`]) { voltageSum += s[`${key}_voltage_max`]; voltageCount++; }
+            if (s[`${key}_voltage_min`]) { voltageSum += s[`${key}_voltage_min`]; voltageCount++; }
+        });
     });
     const avgVoltage = voltageCount > 0 ? (voltageSum / voltageCount).toFixed(2) : '0';
     document.querySelector('#kpi-avg-voltage .kpi-value').textContent = avgVoltage + ' KV';
@@ -239,10 +240,10 @@ function calculateKPIs(submissions) {
     // Average Load
     let loadSum = 0, loadCount = 0;
     submissions.forEach(s => {
-        if (s.ic1_load_max) { loadSum += s.ic1_load_max; loadCount++; }
-        if (s.ic1_load_min) { loadSum += s.ic1_load_min; loadCount++; }
-        if (s.ic2_load_max) { loadSum += s.ic2_load_max; loadCount++; }
-        if (s.ic2_load_min) { loadSum += s.ic2_load_min; loadCount++; }
+        incomerKeys.forEach(key => {
+            if (s[`${key}_load_max`]) { loadSum += s[`${key}_load_max`]; loadCount++; }
+            if (s[`${key}_load_min`]) { loadSum += s[`${key}_load_min`]; loadCount++; }
+        });
     });
     const avgLoad = loadCount > 0 ? (loadSum / loadCount).toFixed(2) : '0';
     document.querySelector('#kpi-avg-load .kpi-value').textContent = avgLoad + ' AMP';
@@ -250,7 +251,7 @@ function calculateKPIs(submissions) {
     // Max Load Today
     let maxLoadEntry = null, maxLoad = 0;
     submissions.forEach(s => {
-        const load = Math.max(s.ic1_load_max || 0, s.ic2_load_max || 0);
+        const load = Math.max(0, ...incomerKeys.map(key => s[`${key}_load_max`] || 0));
         if (load > maxLoad) {
             maxLoad = load;
             maxLoadEntry = s.pssStation;
@@ -261,7 +262,7 @@ function calculateKPIs(submissions) {
     // Min Voltage
     let minVoltage = Infinity;
     submissions.forEach(s => {
-        minVoltage = Math.min(minVoltage, s.ic1_voltage_min || Infinity, s.ic2_voltage_min || Infinity);
+        minVoltage = Math.min(minVoltage, ...incomerKeys.map(key => s[`${key}_voltage_min`] || Infinity));
     });
     document.querySelector('#kpi-min-voltage .kpi-value').textContent = minVoltage === Infinity ? 'N/A' : minVoltage.toFixed(2) + ' KV';
     
@@ -283,17 +284,25 @@ function calculateKPIs(submissions) {
 // VOLTAGE ANALYSIS CHARTS
 // ============================================
 
+function getIncomerChartName(key, submissions) {
+    const historicalName = submissions.find(submission => submission.incomerNames?.[key])?.incomerNames?.[key];
+    if (historicalName) return historicalName;
+    const station = submissions.find(submission => submission.pssStation)?.pssStation;
+    const config = typeof getPSSConfigFor === 'function' ? getPSSConfigFor(station) : null;
+    return config?.icCircuits?.find(circuit => circuit.id === key)?.name || `I/C-${key.slice(2)}`;
+}
+
 function renderVoltageCharts(submissions) {
     // I/C Voltage Chart
     const icCanvas = document.getElementById('chart-ic-voltage');
     if (icCanvas) {
         const ctx = icCanvas.getContext('2d');
-        drawLineChart(ctx, 'I/C Voltage', [
-            { label: 'I/C-1 MAX', data: submissions.map(s => s.ic1_voltage_max || 0), color: '#ef4444' },
-            { label: 'I/C-1 MIN', data: submissions.map(s => s.ic1_voltage_min || 0), color: '#3b82f6' },
-            { label: 'I/C-2 MAX', data: submissions.map(s => s.ic2_voltage_max || 0), color: '#f97316' },
-            { label: 'I/C-2 MIN', data: submissions.map(s => s.ic2_voltage_min || 0), color: '#06b6d4' }
-        ]);
+        const keys = [...new Set(submissions.flatMap(s => Object.keys(s).filter(key => /^ic\d+_voltage_max$/.test(key)).map(key => key.replace('_voltage_max', ''))))].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)));
+        const colors = ['#ef4444', '#f59e0b', '#8b5cf6', '#06b6d4', '#22c55e', '#ec4899', '#eab308', '#3b82f6'];
+        drawLineChart(ctx, 'I/C Voltage', keys.flatMap((key, index) => [
+            { label: `${getIncomerChartName(key, submissions)} MAX`, data: submissions.map(s => s[`${key}_voltage_max`] || 0), color: colors[index % colors.length] },
+            { label: `${getIncomerChartName(key, submissions)} MIN`, data: submissions.map(s => s[`${key}_voltage_min`] || 0), color: `${colors[index % colors.length]}99` }
+        ]));
     }
     
     // PTR Voltage Chart
@@ -316,10 +325,9 @@ function renderLoadCharts(submissions) {
     const loadCanvas = document.getElementById('chart-load-time');
     if (loadCanvas) {
         const ctx = loadCanvas.getContext('2d');
-        drawLineChart(ctx, 'Load Trend', [
-            { label: 'I/C-1 Load', data: submissions.map(s => s.ic1_load_max || 0), color: '#ef4444' },
-            { label: 'I/C-2 Load', data: submissions.map(s => s.ic2_load_max || 0), color: '#3b82f6' }
-        ]);
+        const keys = [...new Set(submissions.flatMap(s => Object.keys(s).filter(key => /^ic\d+_load_max$/.test(key)).map(key => key.replace('_load_max', ''))))].sort((a, b) => Number(a.slice(2)) - Number(b.slice(2)));
+        const colors = ['#ef4444', '#f59e0b', '#8b5cf6', '#06b6d4', '#22c55e', '#ec4899', '#eab308', '#3b82f6'];
+        drawLineChart(ctx, 'Load Trend', keys.map((key, index) => ({ label: `${getIncomerChartName(key, submissions)} Load`, data: submissions.map(s => s[`${key}_load_max`] || 0), color: colors[index % colors.length] })));
     }
 }
 

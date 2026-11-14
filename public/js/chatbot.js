@@ -550,22 +550,16 @@ RECORD #${index + 1}
 `;
 
         // === INCOMING CIRCUITS 33KV - FIXED FIELD NAMES ===
-        if (record.ic1 || record.ic2) {
+        const incomers = getEntryIncomers(record).filter(circuit => circuit.data);
+        if (incomers.length) {
             dataText += `🔵 INCOMING CIRCUITS 33KV:\n`;
-            if (record.ic1) {
-                dataText += `  ▶️ I/C-1 (GSS) 33KV:\n`;
-                dataText += `     Max Voltage: ${record.ic1.maxVoltage || 'N/A'} kV @ ${record.ic1.maxVoltageTime || 'N/A'}\n`;
-                dataText += `     Min Voltage: ${record.ic1.minVoltage || 'N/A'} kV @ ${record.ic1.minVoltageTime || 'N/A'}\n`;
-                dataText += `     Max Load: ${record.ic1.maxLoad || record.ic1.maxCurrent || 'N/A'} A @ ${record.ic1.maxLoadTime || record.ic1.maxCurrentTime || 'N/A'}\n`;
-                dataText += `     Min Load: ${record.ic1.minLoad || record.ic1.minCurrent || 'N/A'} A @ ${record.ic1.minLoadTime || record.ic1.minCurrentTime || 'N/A'}\n`;
-            }
-            if (record.ic2) {
-                dataText += `  ▶️ I/C-2 (GSS) 33KV:\n`;
-                dataText += `     Max Voltage: ${record.ic2.maxVoltage || 'N/A'} kV @ ${record.ic2.maxVoltageTime || 'N/A'}\n`;
-                dataText += `     Min Voltage: ${record.ic2.minVoltage || 'N/A'} kV @ ${record.ic2.minVoltageTime || 'N/A'}\n`;
-                dataText += `     Max Load: ${record.ic2.maxLoad || record.ic2.maxCurrent || 'N/A'} A @ ${record.ic2.maxLoadTime || record.ic2.maxCurrentTime || 'N/A'}\n`;
-                dataText += `     Min Load: ${record.ic2.minLoad || record.ic2.minCurrent || 'N/A'} A @ ${record.ic2.minLoadTime || record.ic2.minCurrentTime || 'N/A'}\n`;
-            }
+            incomers.forEach(({ name, data }) => {
+                dataText += `  ▶️ ${name} (33KV):\n`;
+                dataText += `     Max Voltage: ${data.maxVoltage || 'N/A'} kV @ ${data.maxVoltageTime || 'N/A'}\n`;
+                dataText += `     Min Voltage: ${data.minVoltage || 'N/A'} kV @ ${data.minVoltageTime || 'N/A'}\n`;
+                dataText += `     Max Load: ${data.maxLoad || data.maxCurrent || 'N/A'} A @ ${data.maxLoadTime || data.maxCurrentTime || 'N/A'}\n`;
+                dataText += `     Min Load: ${data.minLoad || data.minCurrent || 'N/A'} A @ ${data.minLoadTime || data.minCurrentTime || 'N/A'}\n`;
+            });
             dataText += `\n`;
         }
 
@@ -1528,8 +1522,7 @@ function chatEquipmentLoads(record) {
         items.push({ name, value, time });
     };
 
-    push('I/C-1 33kV', record.ic1);
-    push('I/C-2 33kV', record.ic2);
+    getEntryIncomers(record).forEach(circuit => push(`${circuit.name} 33kV`, circuit.data));
     for (let i = 1; i <= 6; i += 1) {
         push(`PTR-${i} 33kV`, record[`ptr${i}_33kv`]);
         push(`PTR-${i} 11kV`, record[`ptr${i}_11kv`]);
@@ -1556,8 +1549,7 @@ function chatVoltagePoints(record) {
         });
     };
 
-    push('I/C-1 33kV', record.ic1);
-    push('I/C-2 33kV', record.ic2);
+    getEntryIncomers(record).forEach(circuit => push(`${circuit.name} 33kV`, circuit.data));
     for (let i = 1; i <= 6; i += 1) {
         push(`PTR-${i} 33kV`, record[`ptr${i}_33kv`]);
         push(`PTR-${i} 11kV`, record[`ptr${i}_11kv`]);
@@ -1630,8 +1622,8 @@ function chatFormatRecord(record) {
         lines.push(`Total load: max ${chatFormatNumber(record.totalMaxLoad)} A, min ${chatFormatNumber(record.totalMinLoad)} A`);
     }
 
-    ['ic1', 'ic2'].forEach((key, index) => {
-        const line = chatEquipmentLine(`I/C-${index + 1} 33kV`, record[key]);
+    getEntryIncomers(record).forEach(circuit => {
+        const line = chatEquipmentLine(`${circuit.name} 33kV`, circuit.data);
         if (line) lines.push(line);
     });
     for (let i = 1; i <= 6; i += 1) {

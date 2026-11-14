@@ -1,0 +1,24 @@
+{
+  "name": "loading-data-of-33kv",
+  "version": "1.0.0",
+  "description": "A professional, Firebase-powered web application for managing PSS (Power Sub-Station) loading data with real-time analytics, admin dashboard, and user data entry system.",
+  "main": "fix-js-complete.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ishan863/Loading-Data-of-33kv.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ishan863/Loading-Data-of-33kv/issues"
+  },
+  "homepage": "https://github.com/ishan863/Loading-Data-of-33kv#readme",
+  "dependencies": {
+    "firebase-admin": "^14.5.0"
+  }
+}

@@ -7,6 +7,8 @@ firestore-debug.log
 # Sensitive files
 serviceAccountKey.json
 **/serviceAccountKey.json
+*firebase-adminsdk*.json
+**/*firebase-adminsdk*.json
 
 # Node modules (if you add them later)
 node_modules/

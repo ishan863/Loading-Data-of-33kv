@@ -25,6 +25,7 @@ let selectedHour = 0;
 let selectedMinute = 0;
 let editingSubmissionId = null;
 let pendingEditData = null;
+let activeFormIncomers = null;
 let userRealtimeUnsubscribe = null;
 
 function getActivePSSStation() {
@@ -149,44 +150,19 @@ function calculateUserStatistics() {
     if (todaySubmissions.length > 0) {
         const latestToday = todaySubmissions[0];
         
-        // I/C Data
-        if (latestToday.ic1) {
-            allPeakLoads.push({
-                name: 'I/C-1',
-                icon: '\u26A1',
-                load: parseFloat(latestToday.ic1.maxLoad) || 0,
-                time: latestToday.ic1.maxLoadTime || '--:--',
-                voltage: parseFloat(latestToday.ic1.maxVoltage) || 0,
-                color: '#ef4444'
-            });
-            allMinLoads.push({
-                name: 'I/C-1',
-                icon: '\u26A1',
-                load: parseFloat(latestToday.ic1.minLoad) || 0,
-                time: latestToday.ic1.minLoadTime || '--:--',
-                voltage: parseFloat(latestToday.ic1.minVoltage) || 0,
-                color: '#3b82f6'
-            });
-        }
-        
-        if (latestToday.ic2) {
-            allPeakLoads.push({
-                name: 'I/C-2',
-                icon: '\u26A1',
-                load: parseFloat(latestToday.ic2.maxLoad) || 0,
-                time: latestToday.ic2.maxLoadTime || '--:--',
-                voltage: parseFloat(latestToday.ic2.maxVoltage) || 0,
-                color: '#ef4444'
-            });
-            allMinLoads.push({
-                name: 'I/C-2',
-                icon: '\u26A1',
-                load: parseFloat(latestToday.ic2.minLoad) || 0,
-                time: latestToday.ic2.minLoadTime || '--:--',
-                voltage: parseFloat(latestToday.ic2.minVoltage) || 0,
-                color: '#3b82f6'
-            });
-        }
+        // Include all configured I/Cs. Legacy records still expose ic1/ic2.
+        const dashboardPss = getPSSConfigFor(latestToday.pssStation || appState.currentUser.pssStation);
+        const dashboardIncomers = getConfiguredIncomers(dashboardPss);
+        Object.keys(latestToday).filter(key => /^ic\d+$/.test(key)).forEach(key => {
+            if (!dashboardIncomers.some(circuit => circuit.id === key)) dashboardIncomers.push({ id: key, name: `I/C-${key.slice(2)}` });
+        });
+        dashboardIncomers.forEach((circuit, index) => {
+            const ic = latestToday[circuit.id] || latestToday.incomers?.[circuit.id];
+            if (!ic) return;
+            const name = latestToday.incomerNames?.[circuit.id] || circuit.name || `I/C-${index + 1}`;
+            allPeakLoads.push({ name, icon: '⚡', load: parseFloat(ic.maxLoad) || 0, time: ic.maxLoadTime || '--:--', voltage: parseFloat(ic.maxVoltage) || 0, color: '#ef4444' });
+            allMinLoads.push({ name, icon: '⚡', load: parseFloat(ic.minLoad) || 0, time: ic.minLoadTime || '--:--', voltage: parseFloat(ic.minVoltage) || 0, color: '#3b82f6' });
+        });
         
         // PTR Data - Dynamic based on PSS configuration
         // Get PTR count from PSS config (default to 2 if not found)
@@ -411,7 +387,7 @@ function updateEquipmentCard(elementId, data) {
                 @ ${data.time} | ${data.voltage.toFixed(2)} kV
             </div>
             <p style="margin-top: 0.5rem; font-size: 13px; font-weight: 600; color: rgba(255,255,255,0.9);">
-                ${data.icon} ${data.name}${ptrInfo}
+                ${data.icon} ${escapeHtml(data.name)}${ptrInfo}
             </p>
         `;
         
@@ -685,8 +661,7 @@ async function viewSubmissionDetails(submissionId) {
             <div style="margin-bottom: 1.5rem;">
                 <h3 style="color: #60a5fa; margin-bottom: 1rem; font-size: 18px;">${String.fromCodePoint(0x26A1)} INCOMING (I/C) DATA</h3>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem;">
-                    ${renderEquipmentCard('I/C-1', submission.ic1)}
-                    ${renderEquipmentCard('I/C-2', submission.ic2)}
+                    ${renderIncomerCards(submission)}
                 </div>
             </div>
             
@@ -742,7 +717,7 @@ function renderEquipmentCard(title, data) {
     
     return `
         <div style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 1rem;">
-            <h4 style="color: rgba(255,255,255,0.9); margin: 0 0 0.75rem 0; font-size: 14px; font-weight: 700;">${title}</h4>
+            <h4 style="color: rgba(255,255,255,0.9); margin: 0 0 0.75rem 0; font-size: 14px; font-weight: 700;">${escapeHtml(title)}</h4>
             <div style="display: grid; gap: 0.5rem; font-size: 13px;">
                 <div style="display: flex; justify-content: space-between; padding: 0.5rem; background: rgba(239,68,68,0.1); border-radius: 6px;">
                     <span style="color: rgba(255,255,255,0.7);">🔴 Max Voltage:</span>
@@ -786,6 +761,19 @@ function renderAllPTRCards(submission) {
     }
     
     return ptrCards.length > 0 ? ptrCards.join('') : '<p style="color: rgba(255,255,255,0.5);">No PTR data available</p>';
+}
+
+function renderIncomerCards(submission) {
+    const circuits = getConfiguredIncomers(getPSSConfigFor(submission.pssStation));
+    const keys = new Set([...circuits.map(circuit => circuit.id), ...Object.keys(submission || {}).filter(key => /^ic\d+$/.test(key))]);
+    const cards = Array.from(keys).sort((a, b) => Number(a.slice(2)) - Number(b.slice(2))).map((key, index) => {
+        const data = submission?.[key] || submission?.incomers?.[key];
+        if (!data) return '';
+        const circuit = circuits.find(item => item.id === key);
+        const name = submission?.incomerNames?.[key] || circuit?.name || `I/C-${index + 1}`;
+        return renderEquipmentCard(`${name} (33kV)`, data);
+    }).filter(Boolean);
+    return cards.length ? cards.join('') : '<p style="color:rgba(255,255,255,.5);">No incomer data available</p>';
 }
 
 function renderFeederCards(feeders) {
@@ -1229,6 +1217,7 @@ window.selectMinute = selectMinute;
 function openNewEntryForm(submission = null) {
     editingSubmissionId = submission?.id || null;
     pendingEditData = submission || null;
+    activeFormIncomers = null;
     console.log('Opening entry form...', submission ? `editing ${submission.id}` : 'new entry');
     
     const modal = document.getElementById('newEntryModal');
@@ -1634,11 +1623,14 @@ function createEquipmentSection(title, idPrefix, icon = '⚡') {
 
 function generateICSection() {
     const container = document.getElementById('icContainer');
+    if (!container) return;
+    const pssConfig = getPSSConfigFor(getActivePSSStation());
+    const circuits = getConfiguredIncomers(pssConfig);
+    activeFormIncomers = circuits.map(circuit => ({ ...circuit }));
     container.innerHTML = `
-        ${createEquipmentSection('33KV I/C-1 (GSS)', 'ic1', '🔌')}
-        ${createEquipmentSection('33KV I/C-2 (GSS)', 'ic2', '🔌')}
+        ${circuits.map((circuit, index) => createEquipmentSection(`${escapeHtml(circuit.name)} (33kV)`, circuit.id, '🔌')).join('')}
     `;
-    console.log('✅ Generated I/C sections');
+    console.log(`✅ Generated ${circuits.length} I/C sections for ${getActivePSSStation()}`);
     
     // Initialize clock pickers for all time inputs
     setTimeout(() => initializeTimePickersInModal(), 100);
@@ -1985,8 +1977,9 @@ function applyEditDataToCurrentStep() {
     const data = pendingEditData;
 
     if (currentWizardStep === 1) {
-        fillEquipmentFields('ic1', data.ic1);
-        fillEquipmentFields('ic2', data.ic2);
+        const pssCircuits = getConfiguredIncomers(getPSSConfigFor(getActivePSSStation()));
+        const keys = new Set([...pssCircuits.map(c => c.id), ...Object.keys(data).filter(key => /^ic\d+$/.test(key))]);
+        keys.forEach(key => fillEquipmentFields(key, data[key] || data.incomers?.[key]));
     } else if (currentWizardStep === 2) {
         const ptrCount = Math.max(Number(getPSSConfigFor(getActivePSSStation())?.ptrCount) || 0, 6);
         for (let i = 1; i <= ptrCount; i++) {
@@ -2129,8 +2122,13 @@ async function submitLoadingData() {
         }
         
         // 1. COLLECT I/C DATA
-        const ic1Data = collectEquipmentData('ic1');
-        const ic2Data = collectEquipmentData('ic2');
+        const icCircuits = activeFormIncomers || getConfiguredIncomers(pssData);
+        const incomerData = {};
+        const incomerNames = {};
+        icCircuits.forEach(circuit => {
+            incomerData[circuit.id] = collectEquipmentData(circuit.id);
+            incomerNames[circuit.id] = circuit.name;
+        });
         
         // 2. COLLECT PTR DATA (DYNAMIC based on ptrCount)
         const ptrCount = pssData?.ptrCount || 2;
@@ -2220,9 +2218,11 @@ async function submitLoadingData() {
             date: isoDate,
             timestamp: originalEntry?.timestamp || firebase.firestore.FieldValue.serverTimestamp(),
             
-            // I/C Data (2 sections)
-            ic1: ic1Data,
-            ic2: ic2Data,
+            // Keep legacy fields for existing dashboards and add all configured circuits.
+            ...incomerData,
+            incomers: incomerData,
+            incomerNames,
+            incomerCount: icCircuits.length,
             
             // PTR Data (Dynamic - spread all collected PTR data)
             ...ptrData,
@@ -2256,7 +2256,7 @@ async function submitLoadingData() {
         }
         console.log('✅ Document saved with ID:', docRef.id);
         
-        alert(`✅ Complete Loading Data Submitted Successfully!\n\n📊 Summary:\n• I/C Sections: 2\n• PTR Sections: ${ptrCount}\n• Feeders: ${feedersArray.length}\n• Total Max Load: ${totalMaxLoad.toFixed(2)} AMP\n• Total Min Load: ${totalMinLoad.toFixed(2)} AMP\n• Station Transformer: ✓\n• Charger: ✓`);
+        alert(`✅ Complete Loading Data Submitted Successfully!\n\n📊 Summary:\n• I/C Sections: ${icCircuits.length}\n• PTR Sections: ${ptrCount}\n• Feeders: ${feedersArray.length}\n• Total Max Load: ${totalMaxLoad.toFixed(2)} AMP\n• Total Min Load: ${totalMinLoad.toFixed(2)} AMP\n• Station Transformer: ✓\n• Charger: ✓`);
         
         closeNewEntryForm();
         

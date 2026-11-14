@@ -86,19 +86,11 @@ function extractAMPReadings(submission) {
         }
     };
     
-    // I/C 1 & 2 (33kv Load)
-    if (submission.ic1_33kv_load_max) {
-        addReading(submission.ic1_33kv_load_max, submission.ic1_33kv_load_max_time, 'I/C-1 33kV Max');
-    }
-    if (submission.ic1_33kv_load_min) {
-        addReading(submission.ic1_33kv_load_min, submission.ic1_33kv_load_min_time, 'I/C-1 33kV Min');
-    }
-    if (submission.ic2_33kv_load_max) {
-        addReading(submission.ic2_33kv_load_max, submission.ic2_33kv_load_max_time, 'I/C-2 33kV Max');
-    }
-    if (submission.ic2_33kv_load_min) {
-        addReading(submission.ic2_33kv_load_min, submission.ic2_33kv_load_min_time, 'I/C-2 33kV Min');
-    }
+    getEntryIncomers(submission).forEach(circuit => {
+        const prefix = circuit.id;
+        addReading(submission[`${prefix}_33kv_load_max`], submission[`${prefix}_33kv_load_max_time`], `${circuit.name} 33kV Max`);
+        addReading(submission[`${prefix}_33kv_load_min`], submission[`${prefix}_33kv_load_min_time`], `${circuit.name} 33kV Min`);
+    });
     
     // PTR 1 & 2 (33kv Load)
     if (submission.ptr1_33kv_load_max) {
@@ -196,7 +188,7 @@ function analyzeLoadDistribution(submissions) {
     
     submissions.forEach(submission => {
         // I/C Analysis
-        ['ic1_33kv_load_max', 'ic1_33kv_load_min', 'ic2_33kv_load_max', 'ic2_33kv_load_min'].forEach(field => {
+        Object.keys(submission).filter(field => /^ic\d+_33kv_load_(max|min)$/.test(field)).forEach(field => {
             const value = parseFloat(submission[field]);
             if (!isNaN(value)) {
                 distribution.ic.total += value;
@@ -269,7 +261,7 @@ function analyzePeakHours(submissions) {
     submissions.forEach(submission => {
         // Extract time from max load readings
         const timeFields = [
-            'ic1_33kv_load_max_time', 'ic2_33kv_load_max_time',
+            ...Object.keys(submission).filter(field => /^ic\d+_33kv_load_max_time$/.test(field)),
             'ptr1_33kv_load_max_time', 'ptr2_33kv_load_max_time',
             'ptr1_11kv_load_max_time', 'ptr2_11kv_load_max_time'
         ];
@@ -404,7 +396,7 @@ function analyzeVoltageQuality(submissions) {
     
     submissions.forEach(submission => {
         // I/C 33kV voltage
-        ['ic1_33kv_voltage_max', 'ic1_33kv_voltage_min', 'ic2_33kv_voltage_max', 'ic2_33kv_voltage_min'].forEach(field => {
+        Object.keys(submission).filter(field => /^ic\d+_33kv_voltage_(max|min)$/.test(field)).forEach(field => {
             const value = parseFloat(submission[field]);
             if (!isNaN(value)) {
                 voltageData.ic_33kv.total += value;

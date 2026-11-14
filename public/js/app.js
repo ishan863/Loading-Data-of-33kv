@@ -8,6 +8,7 @@ const appState = {
     pssConfig: {},
     isAdmin: false
 };
+let unsubscribePSSConfig = null;
 
 // Initialize app on DOM load
 document.addEventListener('DOMContentLoaded', async () => {
@@ -125,6 +126,7 @@ async function loadUserData() {
             
             // Load PSS configuration
             await loadPSSConfig();
+            startPSSConfigListener();
             
             // Show appropriate dashboard
             if (appState.isAdmin) {
@@ -173,6 +175,21 @@ async function loadPSSConfig() {
     }
 }
 
+function startPSSConfigListener() {
+    if (unsubscribePSSConfig) unsubscribePSSConfig();
+    unsubscribePSSConfig = db.collection('pss_stations').onSnapshot(snapshot => {
+        const next = {};
+        snapshot.forEach(doc => {
+            const data = doc.data() || {};
+            const name = String(data.name || doc.id).trim();
+            if (!data.name) data.name = doc.id;
+            next[doc.id] = data;
+            if (name && !next[name]) next[name] = data;
+        });
+        appState.pssConfig = next;
+    }, error => console.error('PSS configuration listener error:', error));
+}
+
 // Show screen by ID
 function showScreen(screenId) {
     console.log('showScreen called with:', screenId);
@@ -206,6 +223,10 @@ function showScreen(screenId) {
 
 // Logout function
 function logout() {
+    if (unsubscribePSSConfig) {
+        unsubscribePSSConfig();
+        unsubscribePSSConfig = null;
+    }
     if (typeof window.stopAllRealtimeListeners === 'function') {
         window.stopAllRealtimeListeners();
     }
@@ -368,14 +389,37 @@ function decorateEntry(entry) {
     };
     const pick = (a, b) => (a !== undefined && a !== null && a !== '' ? a : b);
 
-    ['ic1', 'ic2'].forEach(key => {
+    const incomerKeys = new Set(['ic1', 'ic2', ...Object.keys(out).map(key => key.match(/^(ic\d+)(?:_|$)/)?.[1]).filter(Boolean), ...Object.keys(out.incomers || {}).filter(key => /^ic\d+$/.test(key))]);
+    incomerKeys.forEach(key => {
         const src = out[key] || {};
-        out[`${key}_voltage_max`] = num(pick(out[`${key}_voltage_max`], src.maxVoltage));
-        out[`${key}_voltage_min`] = num(pick(out[`${key}_voltage_min`], src.minVoltage));
-        out[`${key}_load_max`] = num(pick(out[`${key}_load_max`], src.maxLoad));
-        out[`${key}_load_min`] = num(pick(out[`${key}_load_min`], src.minLoad));
-        out[`${key}_max_time`] = pick(out[`${key}_max_time`], src.maxLoadTime || src.maxVoltageTime || '');
-        out[`${key}_min_time`] = pick(out[`${key}_min_time`], src.minLoadTime || src.minVoltageTime || '');
+        const nested = out.incomers?.[key] || {};
+        const hasICSource = !!out[key] || Object.keys(out).some(field =>
+            field.startsWith(`${key}_`) && out[field] !== undefined && out[field] !== null && out[field] !== ''
+        ) || Object.keys(nested).length > 0;
+        out[`${key}_voltage_max`] = num(pick(out[`${key}_voltage_max`], src.maxVoltage ?? nested.maxVoltage));
+        out[`${key}_voltage_min`] = num(pick(out[`${key}_voltage_min`], src.minVoltage ?? nested.minVoltage));
+        out[`${key}_load_max`] = num(pick(out[`${key}_load_max`], src.maxLoad ?? nested.maxLoad));
+        out[`${key}_load_min`] = num(pick(out[`${key}_load_min`], src.minLoad ?? nested.minLoad));
+        out[`${key}_33kv_voltage_max`] = num(pick(out[`${key}_33kv_voltage_max`], src.maxVoltage ?? nested.maxVoltage));
+        out[`${key}_33kv_voltage_min`] = num(pick(out[`${key}_33kv_voltage_min`], src.minVoltage ?? nested.minVoltage));
+        out[`${key}_33kv_load_max`] = num(pick(out[`${key}_33kv_load_max`], src.maxLoad ?? nested.maxLoad));
+        out[`${key}_33kv_load_min`] = num(pick(out[`${key}_33kv_load_min`], src.minLoad ?? nested.minLoad));
+        out[`${key}_max_time`] = pick(out[`${key}_max_time`], src.maxLoadTime || src.maxVoltageTime || nested.maxLoadTime || nested.maxVoltageTime || '');
+        out[`${key}_min_time`] = pick(out[`${key}_min_time`], src.minLoadTime || src.minVoltageTime || nested.minLoadTime || nested.minVoltageTime || '');
+        out[`${key}_33kv_load_max_time`] = pick(out[`${key}_33kv_load_max_time`], src.maxLoadTime || nested.maxLoadTime || '');
+        out[`${key}_33kv_load_min_time`] = pick(out[`${key}_33kv_load_min_time`], src.minLoadTime || nested.minLoadTime || '');
+        const normalizedIC = {
+            ...src,
+            maxVoltage: num(src.maxVoltage ?? nested.maxVoltage ?? out[`${key}_33kv_voltage_max`]),
+            maxVoltageTime: pick(src.maxVoltageTime, nested.maxVoltageTime || out[`${key}_33kv_voltage_max_time`] || ''),
+            minVoltage: num(src.minVoltage ?? nested.minVoltage ?? out[`${key}_33kv_voltage_min`]),
+            minVoltageTime: pick(src.minVoltageTime, nested.minVoltageTime || out[`${key}_33kv_voltage_min_time`] || ''),
+            maxLoad: num(src.maxLoad ?? nested.maxLoad ?? out[`${key}_33kv_load_max`]),
+            maxLoadTime: pick(src.maxLoadTime, nested.maxLoadTime || out[`${key}_33kv_load_max_time`] || ''),
+            minLoad: num(src.minLoad ?? nested.minLoad ?? out[`${key}_33kv_load_min`]),
+            minLoadTime: pick(src.minLoadTime, nested.minLoadTime || out[`${key}_33kv_load_min_time`] || '')
+        };
+        if (hasICSource) out[key] = normalizedIC;
     });
 
     for (let i = 1; i <= 6; i++) {
@@ -411,6 +455,38 @@ function decorateEntry(entry) {
 
 function decorateEntries(entries) {
     return sortEntriesDesc((entries || []).map(decorateEntry));
+}
+
+// Older stations did not store an incomer list; preserve their two standard
+// circuits while allowing each station to configure any number of circuits.
+function getConfiguredIncomers(pssConfig) {
+    const configured = pssConfig?.icCircuits;
+    if (Array.isArray(configured) && configured.length) {
+        const circuits = configured.map((circuit, index) => ({
+            id: String(circuit?.id || `ic${index + 1}`).toLowerCase(),
+            name: String(circuit?.name || `I/C-${index + 1}`)
+        })).filter(circuit => /^ic\d+$/i.test(circuit.id));
+        if (circuits.length) return circuits;
+    }
+    const count = Math.max(2, Math.min(20, Number(pssConfig?.incomerCount) || 2));
+    return Array.from({ length: count }, (_, index) => ({ id: `ic${index + 1}`, name: `I/C-${index + 1}` }));
+}
+
+function getEntryIncomers(entry) {
+    if (!entry || typeof entry !== 'object') return [];
+    const configured = getConfiguredIncomers(getPSSConfigFor(entry.pssStation));
+    const circuits = new Map(configured.map(circuit => [circuit.id, circuit]));
+    Object.keys(entry).filter(key => /^ic\d+$/.test(key)).forEach(key => {
+        if (!circuits.has(key)) circuits.set(key, { id: key, name: `I/C-${key.slice(2)}` });
+    });
+    Object.keys(entry.incomers || {}).filter(key => /^ic\d+$/.test(key)).forEach(key => {
+        if (!circuits.has(key)) circuits.set(key, { id: key, name: `I/C-${key.slice(2)}` });
+    });
+    return [...circuits.values()].map(circuit => ({
+        ...circuit,
+        name: entry.incomerNames?.[circuit.id] || circuit.name,
+        data: entry[circuit.id] || entry.incomers?.[circuit.id] || null
+    }));
 }
 
 console.log('✅ App controller loaded');
