@@ -5718,7 +5718,14 @@ function renderExcelStyleTable(data) {
                 <td style="padding: 10px 8px; text-align: center; font-weight: 700; font-size: 13px; color: #fcd34d; border: 2px solid #f59e0b; background: rgba(245,158,11,0.15);">${totalMaxLoad.toFixed(2)}</td>
                 <td style="padding: 10px 8px; text-align: center; font-weight: 700; font-size: 13px; color: #67e8f9; border: 2px solid #06b6d4; background: rgba(6,182,212,0.15);">${totalMinLoad.toFixed(2)}</td>
                 <td style="padding:10px 8px;text-align:center;border:1px solid rgba(245,158,11,.25);color:#fcd34d;font-weight:600;">${entry.stationTransformer?.ptrNo || entry.stationTransformer?.ptr || '-'}</td>
-                <td style="padding:10px 8px; border:1px solid rgba(239,68,68,.2); color:white;">${getEntryIncomers(entry).map(circuit => `${escapeHtml(circuit.name)}${Number(circuit.id.slice(2)) > 2 ? `: ${circuit.data ? `${circuit.data.maxVoltage ?? '-'}kV / ${circuit.data.maxLoad ?? '-'}A` : '-'}` : ''}`).join('<br>') || '-'}</td>
+                <td style="padding:10px 8px; border:1px solid rgba(239,68,68,.2); color:white; font-size:11px; line-height:1.45; vertical-align: middle;">
+                  ${getEntryIncomers(entry).map(circuit => {
+                    const d = circuit.data || {};
+                    const hasData = d && (d.maxVoltage || d.minVoltage || d.maxLoad || d.minLoad);
+                    const dataPart = hasData ? ` — ${escapeHtml((d.maxVoltage ?? '-'))}kV / ${escapeHtml((d.maxLoad ?? '-'))}A @ ${escapeHtml((d.maxVoltageTime ?? d.maxLoadTime ?? '--:--'))}` : '';
+                    return `<div style="margin-bottom:2px;">${escapeHtml(circuit.name)}${dataPart}</div>`;
+                  }).join('') || '<span style="opacity:.6">-</span>'}
+                </td>
             </tr>
         `;
         
