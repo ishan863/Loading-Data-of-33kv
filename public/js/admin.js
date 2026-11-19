@@ -439,6 +439,10 @@ function setupViewEvents() {
             filterData(e.target.value);
         }, 300));
     }
+    const viewSearch = document.getElementById('viewSearch');
+    if (viewSearch) {
+        viewSearch.addEventListener('input', debounce(() => filterViewAllData(), 300));
+    }
     
     // Filters
     document.getElementById('filter-pss')?.addEventListener('change', applyFilters);
@@ -5361,37 +5365,35 @@ function filterViewAllData() {
     const filterFromDate = document.getElementById('viewFilterFromDate')?.value || '';
     const filterToDate = document.getElementById('viewFilterToDate')?.value || '';
     const filterStaff = document.getElementById('viewFilterStaff')?.value || '';
-    
-    console.log('📊 Filtering View All data:', { filterPSS, filterFromDate, filterToDate, filterStaff });
+    const searchTerm = String(document.getElementById('viewSearch')?.value || '').toLowerCase();
+
+    console.log('📊 Filtering View All data:', { filterPSS, filterFromDate, filterToDate, filterStaff, searchTerm });
     console.log(`📊 Source data count: ${adminState.allSubmissions.length}`);
     
-    let filtered = adminState.allSubmissions;
-    
-    if (filterPSS) {
-        filtered = filtered.filter(s => s.pssStation === filterPSS);
-        console.log(`  After PSS filter: ${filtered.length} records`);
-    }
-    
-    if (filterFromDate) {
-        filtered = filtered.filter(s => s.date >= filterFromDate);
-        console.log(`  After From Date filter: ${filtered.length} records`);
-    }
-    if (filterToDate) {
-        filtered = filtered.filter(s => s.date <= filterToDate);
-        console.log(`  After To Date filter: ${filtered.length} records`);
-    }
-    
-    if (filterStaff) {
-        filtered = filtered.filter(s => s.staffName === filterStaff);
-        console.log(`  After Staff filter: ${filtered.length} records`);
-    }
-    
+    let filtered = adminState.allSubmissions.filter(submission => {
+        const matchesPSS = !filterPSS || submission.pssStation === filterPSS;
+        const matchesDate = !filterFromDate || submission.date >= filterFromDate;
+        const matchesToDate = !filterToDate || submission.date <= filterToDate;
+        const matchesUser = !filterStaff || submission.staffName === filterStaff;
+        if (!(matchesPSS && matchesDate && matchesToDate && matchesUser)) return false;
+        if (!searchTerm) return true;
+        const haystack = [
+            submission.pssStation,
+            submission.staffName,
+            submission.personnelName,
+            submission.phoneNumber,
+            submission.date
+        ].filter(v => v !== undefined && v !== null).join(' ');
+        return haystack.toLowerCase().includes(searchTerm);
+    });
     viewAllFilteredData = filtered;
     console.log(`✅ Final filtered count: ${viewAllFilteredData.length}`);
     renderExcelStyleTable(viewAllFilteredData);
 }
 
 function clearViewFilters() {
+    const vsEl = document.getElementById('viewSearch');
+    if (vsEl) vsEl.value = '';
     document.getElementById('viewFilterPSS').value = '';
     document.getElementById('viewFilterFromDate').value = '';
     document.getElementById('viewFilterToDate').value = '';
@@ -5520,6 +5522,16 @@ function renderExcelStyleTable(data) {
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: #fca5a5; font-weight: 600;">${entry.ic2?.minLoad || '-'}</td>
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ic2?.minLoadTime || '-'}</td>
                 
+                <!-- I/C-3 Data -->
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: white;">${entry.ic3?.maxVoltage ? entry.ic3.maxVoltage + ' kV' : '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ic3?.maxVoltageTime || '--:--'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: white;">${entry.ic3?.minVoltage ? entry.ic3.minVoltage + ' kV' : '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ic3?.minVoltageTime || '--:--'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: #fca5a5; font-weight: 600;">${entry.ic3?.maxLoad ? entry.ic3.maxLoad + ' A' : '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ic3?.maxLoadTime || '--:--'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: #fca5a5; font-weight: 600;">${entry.ic3?.minLoad ? entry.ic3.minLoad + ' A' : '-'}</td>
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ic3?.minLoadTime || '--:--'}</td>
+                
                 <!-- PTR-1 33kv Data -->
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); color: white;">${entry.ptr1_33kv?.maxVoltage || '-'}</td>
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr1_33kv?.maxVoltageTime || '-'}</td>
@@ -5601,13 +5613,13 @@ function renderExcelStyleTable(data) {
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(34,197,94,0.2); background: rgba(34,197,94,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ptr4_11kv?.minLoadTime || '-'}</td>
             `;
             
-            // Render Feeders (6 feeders, 10 columns each)
+            // Render Feeders (7 feeders, 10 columns each)
             if (index === 0 && entry.feeders) {
                 console.log('🔍 Feeder keys in first entry:', Object.keys(entry.feeders));
                 console.log('🔍 First feeder data:', Object.values(entry.feeders)[0]);
             }
             
-            for (let i = 1; i <= 6; i++) {
+            for (let i = 1; i <= 7; i++) {
                 const feederKey = `Feeder-${i}`;  // Try "Feeder-1" format
                 let feeder = entry.feeders?.[feederKey];
                 

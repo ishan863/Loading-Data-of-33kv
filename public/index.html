@@ -1019,7 +1019,11 @@
                 <p style="color: rgba(255,255,255,0.7); margin-bottom: 1.5rem;">Complete comprehensive data with all 127 columns - I/C Sections, PTR Sections, Feeders, Equipment with full voltage, load, and time data</p>
                 
                 <!-- Filter Controls -->
-                <div class="view-controls" style="margin-bottom: 1.5rem;">
+                <div class="view-controls" style="margin-bottom: 1.5rem; display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start;">
+                    <div class="filter-group" style="flex: 1 1 260px; min-width: 220px;">
+                        <label style="display:block;margin-bottom:4px;font-size:12px;color:rgba(255,255,255,0.75);">Search PSS / Staff / Date</label>
+                        <input type="search" id="viewSearch" class="form-control" placeholder="Find a PSS station..." autocomplete="off">
+                    </div>
                     <div class="filter-group">
                         <label>Filter by PSS:</label>
                         <select id="viewFilterPSS" class="form-control" onchange="filterViewAllData()">
@@ -1064,6 +1068,9 @@
                                 <!-- I/C-2 Section -->
                                 <th colspan="8" style="padding: 12px 8px; border: 2px solid #ef4444; background: rgba(239,68,68,0.25); text-align: center; font-weight: 700; color: #fca5a5; font-size: 13px;">📊 I/C-2 (GSS) 33KV</th>
                                 
+                                <!-- I/C-3 Section -->
+                                <th colspan="8" style="padding: 12px 8px; border: 2px solid #ef4444; background: rgba(239,68,68,0.25); text-align: center; font-weight: 700; color: #fca5a5; font-size: 13px;">📊 I/C-3 (GSS) 33KV</th>
+                                
                                 <!-- PTR Sections -->
                                 <th colspan="8" style="padding: 12px 8px; border: 2px solid #22c55e; background: rgba(34,197,94,0.25); text-align: center; font-weight: 700; color: #86efac; font-size: 13px;">🔄 PTR-1 33KV</th>
                                 <th colspan="8" style="padding: 12px 8px; border: 2px solid #22c55e; background: rgba(34,197,94,0.25); text-align: center; font-weight: 700; color: #86efac; font-size: 13px;">🔄 PTR-2 33KV</th>
@@ -1081,6 +1088,9 @@
                                 <th colspan="10" style="padding: 12px 8px; border: 2px solid #3b82f6; background: rgba(59,130,246,0.25); text-align: center; font-weight: 700; color: #93c5fd; font-size: 13px;">⚡ FEEDER 4 (11KV)</th>
                                 <th colspan="10" style="padding: 12px 8px; border: 2px solid #3b82f6; background: rgba(59,130,246,0.25); text-align: center; font-weight: 700; color: #93c5fd; font-size: 13px;">⚡ FEEDER 5 (11KV)</th>
                                 <th colspan="10" style="padding: 12px 8px; border: 2px solid #3b82f6; background: rgba(59,130,246,0.25); text-align: center; font-weight: 700; color: #93c5fd; font-size: 13px;">⚡ FEEDER 6 (11KV)</th>
+                                
+                                <!-- Feeder 7 Section -->
+                                <th colspan="10" style="padding: 12px 8px; border: 2px solid #3b82f6; background: rgba(59,130,246,0.25); text-align: center; font-weight: 700; color: #93c5fd; font-size: 13px;">⚡ FEEDER 7 (11KV)</th>
                                 
                                 <!-- Station Transformer -->
                                 <th colspan="8" style="padding: 12px 8px; border: 2px solid #f59e0b; background: rgba(245,158,11,0.25); text-align: center; font-weight: 700; color: #fcd34d; font-size: 13px;">🔋 Station Transformer</th>
@@ -1106,6 +1116,16 @@
                                 <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Min I Time</th>
                                 
                                 <!-- I/C-2 Sub-headers -->
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Max V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Max V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Min V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Min V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Max I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Max I Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Min I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Min I Time</th>
+                                
+                                <!-- I/C-3 Sub-headers -->
                                 <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Max V(KV)</th>
                                 <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Max V Time</th>
                                 <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(239,68,68,0.3); background: rgba(239,68,68,0.15); color: rgba(255,255,255,0.9);">Min V(KV)</th>
@@ -1267,6 +1287,18 @@
                                 <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min I(A)</th>
                                 <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min I Time</th>
                                 
+                                <!-- Feeder 7 Sub-headers -->
+                                <th style="min-width: 100px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Feeder Name</th>
+                                <th style="min-width: 50px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">PTR No</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min V(KV)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min V Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Max I Time</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min I(A)</th>
+                                <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(59,130,246,0.3); background: rgba(59,130,246,0.15); color: rgba(255,255,255,0.9);">Min I Time</th>
+                                
                                 <!-- Station Transformer Sub-headers -->
                                 <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(245,158,11,0.3); background: rgba(245,158,11,0.15); color: rgba(255,255,255,0.9);">Max V(KV)</th>
                                 <th style="min-width: 65px; padding: 8px 4px; border: 1px solid rgba(245,158,11,0.3); background: rgba(245,158,11,0.15); color: rgba(255,255,255,0.9);">Max V Time</th>
@@ -1291,7 +1323,7 @@
                         </thead>
                         <tbody id="excelDataBody">
                             <tr>
-                                <td colspan="129" style="text-align: center; padding: 2rem; color: rgba(255,255,255,0.7);">Loading comprehensive data...</td>
+                                <td colspan="183" style="text-align: center; padding: 2rem; color: rgba(255,255,255,0.7);">Loading comprehensive data...</td>
                             </tr>
                         </tbody>
                     </table>
