@@ -481,7 +481,6 @@ async function loadAttendanceMonth(month, force = false) {
 
 function refreshAttendanceWindow() {
     if (!attendanceState.initialized) return;
-    if (attendanceState.month !== attendanceTodayIso().slice(0, 7)) return;
     attendanceState.cache.delete(attendanceState.month);
     loadAttendanceMonth(attendanceState.month, true);
 }

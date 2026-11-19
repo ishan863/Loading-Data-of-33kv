@@ -5461,7 +5461,7 @@ function renderExcelStyleTable(data) {
     if (!tbody) return;
     
     if (data.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="129" style="text-align: center; padding: 2rem; color: rgba(255,255,255,0.7);">No data available</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="186" style="text-align: center; padding: 2rem; color: rgba(255,255,255,0.7);">No data available</td></tr>';
         return;
     }
     
@@ -5503,6 +5503,7 @@ function renderExcelStyleTable(data) {
                 <td style="padding: 10px 8px; font-family: monospace; border: 1px solid rgba(255,255,255,0.08); position: sticky; left: 340px; background: rgba(30,41,59,0.95); z-index: 50;">${entry.phoneNumber || '-'}</td>
                 
                 <!-- I/C-1 Data -->
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.12); color: #fca5a5; font-weight: 700; font-size: 10px;">${(getEntryIncomers(entry) || [])[0]?.name || 'I/C-1'}</td>
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: white;">${entry.ic1?.maxVoltage ? entry.ic1.maxVoltage + ' kV' : '-'}</td>
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ic1?.maxVoltageTime || '--:--'}</td>
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: white;">${entry.ic1?.minVoltage ? entry.ic1.minVoltage + ' kV' : '-'}</td>
@@ -5513,6 +5514,7 @@ function renderExcelStyleTable(data) {
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ic1?.minLoadTime || '--:--'}</td>
                 
                 <!-- I/C-2 Data -->
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.12); color: #fca5a5; font-weight: 700; font-size: 10px;">${(getEntryIncomers(entry) || [])[1]?.name || 'I/C-2'}</td>
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: white;">${entry.ic2?.maxVoltage || '-'}</td>
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ic2?.maxVoltageTime || '-'}</td>
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: white;">${entry.ic2?.minVoltage || '-'}</td>
@@ -5523,6 +5525,7 @@ function renderExcelStyleTable(data) {
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ic2?.minLoadTime || '-'}</td>
                 
                 <!-- I/C-3 Data -->
+                <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.12); color: #fca5a5; font-weight: 700; font-size: 10px;">${(getEntryIncomers(entry) || [])[2]?.name || 'I/C-3'}</td>
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: white;">${entry.ic3?.maxVoltage ? entry.ic3.maxVoltage + ' kV' : '-'}</td>
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); font-size: 10px; color: rgba(255,255,255,0.8);">${entry.ic3?.maxVoltageTime || '--:--'}</td>
                 <td style="padding: 8px 6px; text-align: center; border: 1px solid rgba(239,68,68,0.2); background: rgba(239,68,68,0.05); color: white;">${entry.ic3?.minVoltage ? entry.ic3.minVoltage + ' kV' : '-'}</td>
