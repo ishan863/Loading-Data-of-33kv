@@ -223,6 +223,11 @@ function showAdminWindow(windowName) {
         case 'view':
             loadViewWindow();
             break;
+        case 'attendance':
+            if (typeof loadAttendanceWindow === 'function') {
+                loadAttendanceWindow();
+            }
+            break;
         case 'analytics':
             loadAnalyticsWindow();
             break;
@@ -2855,6 +2860,8 @@ function startRealTimeListeners() {
         } else if (adminState.currentWindow === 'manage') {
             renderManageUsers();
             renderManagePSS();
+        } else if (adminState.currentWindow === 'attendance') {
+            if (typeof refreshAttendanceWindow === 'function') refreshAttendanceWindow();
         }
     }, 350);
 

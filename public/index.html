@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="css/form.css?v=101">
     <link rel="stylesheet" href="css/custom-select.css?v=101">
     <link rel="stylesheet" href="css/dashboard-analytics.css?v=101">
+    <link rel="stylesheet" href="css/attendance.css?v=102">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -770,6 +771,7 @@
                 <button class="admin-tab active" data-tab="overview">📊 Overview</button>
                 <button class="admin-tab" data-tab="upload">📤 Upload Data</button>
                 <button class="admin-tab" data-tab="view">👁️ View All</button>
+                <button class="admin-tab" data-tab="attendance">&#128197; Attendance</button>
                 <button class="admin-tab" data-tab="analytics">📈 Analytics</button>
                 <button class="admin-tab" data-tab="ai-assistant">🤖 AI Assistant</button>
                 <button class="admin-tab" data-tab="manage">Manage</button>
@@ -1294,6 +1296,82 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            <div id="attendanceTab" class="admin-tab-content">
+                <div class="attendance-shell">
+                    <section class="attendance-hero">
+                        <div class="attendance-hero-copy">
+                            <span class="attendance-kicker">Monthly submission register</span>
+                            <h2>PSS Attendance Sheet</h2>
+                            <p>Every station, every day of the month. Click any date cell to inspect the complete submitted reading on this screen.</p>
+                        </div>
+                        <div class="attendance-month-panel">
+                            <div class="attendance-month-row">
+                                <button type="button" id="attendancePrevMonth" class="attendance-month-nav" aria-label="Previous month">&#8249;</button>
+                                <input type="month" id="attendanceMonthPicker" class="attendance-month-input" aria-label="Attendance month">
+                                <button type="button" id="attendanceNextMonth" class="attendance-month-nav" aria-label="Next month">&#8250;</button>
+                            </div>
+                            <div class="attendance-quick-actions">
+                                <button type="button" id="attendanceTodayButton" class="attendance-ghost-button">Today</button>
+                                <button type="button" id="attendanceRefreshButton" class="attendance-refresh-button">Refresh</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <div id="attendanceNotice" class="attendance-notice" hidden></div>
+
+                    <section id="attendanceSummary" class="attendance-summary" aria-label="Attendance summary" aria-live="polite"></section>
+
+                    <section class="attendance-board">
+                        <div class="attendance-board-head">
+                            <div>
+                                <h3 id="attendanceMonthTitle">Monthly register</h3>
+                                <p id="attendanceMonthSubtitle">Loading attendance data...</p>
+                            </div>
+                            <div class="attendance-board-tools">
+                                <label class="attendance-search">
+                                    <span class="attendance-search-icon" aria-hidden="true">&#9906;</span>
+                                    <input type="search" id="attendanceSearch" placeholder="Find a PSS station" autocomplete="off">
+                                </label>
+                                <select id="attendanceFilter" class="attendance-filter" aria-label="Filter attendance rows">
+                                    <option value="all">All stations</option>
+                                    <option value="attention">Needs attention</option>
+                                    <option value="complete">Complete</option>
+                                    <option value="duplicates">Duplicates</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="attendance-legend" aria-label="Attendance legend">
+                            <span class="attendance-legend-item"><i class="attendance-legend-dot is-submitted"></i>Submitted</span>
+                            <span class="attendance-legend-item"><i class="attendance-legend-dot is-missing"></i>Missing</span>
+                            <span class="attendance-legend-item"><i class="attendance-legend-dot is-duplicate"></i>Duplicate entry</span>
+                            <span class="attendance-legend-item"><i class="attendance-legend-dot is-future"></i>Future date</span>
+                            <span class="attendance-legend-hint">Tap a cell for full details</span>
+                        </div>
+
+                        <div id="attendanceSheetState" class="attendance-sheet-state" aria-live="polite">
+                            Open the Attendance tab to load the monthly register.
+                        </div>
+
+                        <div id="attendanceSheetWrap" class="attendance-sheet-wrap" hidden>
+                            <table id="attendanceSheet" class="attendance-sheet">
+                                <thead id="attendanceSheetHead"></thead>
+                                <tbody id="attendanceSheetBody"></tbody>
+                                <tfoot id="attendanceSheetFoot"></tfoot>
+                            </table>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <div id="attendanceDetailOverlay" class="attendance-detail-overlay" hidden>
+                <div class="attendance-detail-backdrop" data-attendance-close></div>
+                <aside class="attendance-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="attendanceDetailTitle">
+                    <button type="button" class="attendance-detail-close" data-attendance-close aria-label="Close details">&#10005;</button>
+                    <div id="attendanceDetailContent" class="attendance-detail-content"></div>
+                </aside>
             </div>
 
             <div id="analyticsTab" class="admin-tab-content">
@@ -2084,7 +2162,8 @@
     <script src="js/new-dashboard-analytics.js?v=101"></script>
     <script src="js/new-analytics.js?v=101"></script>
     <script src="js/chatbot.js?v=101"></script>
-    <script src="js/admin.js?v=101"></script>
+    <script src="js/admin.js?v=102"></script>
+    <script src="js/attendance.js?v=102"></script>
     <script src="js/custom-select.js?v=101"></script>
     <script src="js/user.js?v=101"></script>
     <!-- form-handler.js removed - using wizard in user.js -->
