@@ -15,6 +15,7 @@ const userState = {
     calendarSelectedDate: '',
     calendarRangeFrom: '',
     calendarRangeTo: '',
+    calendarStaffFilter: 'all',
     // Submission history pagination
     submissionPage: 1,
     submissionPageSize: 10,
@@ -612,7 +613,24 @@ function getCalendarScopeEntries() {
     const source = userState.calendarScope === 'station'
         ? userState.pssSubmissions
         : userState.mySubmissions;
-    return (source || []).filter(entry => !!normalizeDateValue(entry.date));
+    let entries = (source || []).filter(entry => !!normalizeDateValue(entry.date));
+    // Filter by selected staff name
+    const staffFilter = userState.calendarStaffFilter || 'all';
+    if (staffFilter && staffFilter !== 'all') {
+        entries = entries.filter(entry => String(entry.staffName || '').trim() === staffFilter);
+    }
+    return entries;
+}
+
+function getCalendarScopeStaffNames() {
+    const source = userState.calendarScope === 'station'
+        ? userState.pssSubmissions
+        : userState.mySubmissions;
+    const staffSet = new Set();
+    (source || []).forEach(entry => {
+        if (entry.staffName) staffSet.add(String(entry.staffName).trim());
+    });
+    return [...staffSet].sort();
 }
 
 function getCalendarEntriesByDate() {
@@ -712,6 +730,36 @@ function setUserCalendarScope(scope) {
 }
 window.setUserCalendarScope = setUserCalendarScope;
 
+function setCalendarStaffFilter(staffName) {
+    userState.calendarStaffFilter = staffName || 'all';
+    userState.calendarRangeFrom = '';
+    userState.calendarRangeTo = '';
+    userState.calendarSelectedDate = '';
+    // Update chip active states
+    document.querySelectorAll('.staff-chip').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.staff === staffName);
+    });
+    renderUserCalendar();
+    renderCalendarStaffChips();
+}
+window.setCalendarStaffFilter = setCalendarStaffFilter;
+
+function renderCalendarStaffChips() {
+    const container = document.getElementById('calendarStaffChips');
+    if (!container) return;
+    // Collect unique staff names from scope entries
+    const staffList = getCalendarScopeStaffNames();
+    const currentFilter = userState.calendarStaffFilter || 'all';
+    let html = '';
+    staffList.forEach(name => {
+        const active = currentFilter === name ? 'active' : '';
+        html += `<button type="button" class="staff-chip ${active}" data-staff="${name}" onclick="setCalendarStaffFilter('${name}')">${name}</button>`;
+    });
+    container.innerHTML = html;
+}
+
+window.renderCalendarStaffChips = renderCalendarStaffChips;
+
 function renderUserCalendar() {
     const grid = document.getElementById('userCalendarGrid');
     if (!grid) return;
@@ -774,6 +822,7 @@ function renderUserCalendar() {
 
     renderUserCalendarSummary(rangeByDate, monthKey);
     renderUserCalendarDetails(userState.calendarSelectedDate);
+    renderCalendarStaffChips();
 }
 window.renderUserCalendar = renderUserCalendar;
 

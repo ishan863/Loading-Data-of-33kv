@@ -2633,7 +2633,8 @@
 }
 
 /* ===== CALENDAR DATE RANGE PICKER STYLES ===== */
-.user-calendar-range {
+/* ===== CALENDAR STAFF FILTER STYLES ===== */
+.user-calendar-staff {
     display: flex;
     align-items: center;
     gap: 0.75rem;
@@ -2645,13 +2646,14 @@
     border-radius: 12px;
 }
 
-.range-group {
+.staff-filter-group {
     display: flex;
-    flex-direction: column;
-    gap: 0.3rem;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
 }
 
-.range-label {
+.staff-filter-label {
     font-size: 11px;
     font-weight: 700;
     color: rgba(255,255,255,0.6);
@@ -2659,26 +2661,48 @@
     text-transform: uppercase;
 }
 
-.range-group .form-control {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.12);
-    color: #fff;
-    cursor: pointer;
-    padding: 0.6rem 0.8rem;
+.staff-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
 }
 
-.range-group .form-control:focus {
-    outline: none;
-    border-color: #8b5cf6;
+.staff-chip {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    color: #cbd5e1;
+    padding: 0.35rem 0.8rem;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+.staff-chip:hover {
+    background: rgba(255,255,255,0.12);
+    border-color: rgba(255,255,255,0.3);
+}
+
+.staff-chip.active {
+    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 0 12px rgba(139,92,246,0.45);
 }
 
 @media (max-width: 420px) {
-    .user-calendar-range {
+    .user-calendar-staff {
         flex-direction: column;
         align-items: stretch;
     }
-    .user-calendar-range button {
-        width: 100%;
+    .staff-filter-group {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .staff-chip {
+        width: auto;
     }
 }
 
