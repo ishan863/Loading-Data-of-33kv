@@ -2174,7 +2174,7 @@
 
 .user-calendar-grid {
     display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(40px, 1fr));
     gap: 0.45rem;
 }
 
@@ -3609,6 +3609,14 @@
     }
     .user-calendar-daynum {
         font-size: 10px;
+    }
+    .user-calendar-section {
+        overflow-x: auto;
+        padding-bottom: 0.2rem;
+    }
+    .user-calendar-grid {
+        min-width: 300px;
+        gap: 2px;
     }
     .recent-submissions-table th,
     .recent-submissions-table td {
