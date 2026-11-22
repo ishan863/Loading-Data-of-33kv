@@ -17,7 +17,8 @@ const adminState = {
     pssStations: [],
     charts: {},
     listenersStarted: false,
-    unsubscribeListeners: []
+    unsubscribeListeners: [],
+    analyticsDateRange: { fromDate: '', toDate: '' }
 };
 
 const ADMIN_REALTIME_LIMIT = 2000;
@@ -798,10 +799,21 @@ function refreshAnalytics() {
 function renderTop5Rankings(data) {
     const entries = Array.isArray(data) ? data : getCompleteAdminDataset();
 
+    // Apply date range filter if set
+    const rangeFrom = adminState.analyticsDateRange.fromDate || '';
+    const rangeTo = adminState.analyticsDateRange.toDate || '';
+    const filteredEntries = (entries || []).filter(entry => {
+        const date = normalizeDateValue(entry.date);
+        if (!date) return true; // keep entries without dates
+        if (rangeFrom && date < rangeFrom) return false;
+        if (rangeTo && date > rangeTo) return false;
+        return true;
+    });
+
     const persons = new Map();
     const stations = new Map();
 
-    (entries || []).forEach(entry => {
+    (filteredEntries || []).forEach(entry => {
         const personName = String(entry.staffName || entry.submittedBy || '').trim();
         if (personName) {
             const key = personName.toLowerCase();
@@ -870,6 +882,32 @@ function renderTop5RankList(containerId, rows, type) {
 }
 
 window.renderTop5Rankings = renderTop5Rankings;
+
+function applyAdminAnalyticsDateRange() {
+    const fromEl = document.getElementById('adminAnalyticsFromDate');
+    const toEl = document.getElementById('adminAnalyticsToDate');
+    adminState.analyticsDateRange.fromDate = fromEl ? fromEl.value : '';
+    adminState.analyticsDateRange.toDate = toEl ? toEl.value : '';
+    console.log('📅 Admin analytics date range:', adminState.analyticsDateRange);
+    if (adminState.currentWindow === 'analytics' && typeof renderTop5Rankings === 'function') {
+        renderTop5Rankings(getCompleteAdminDataset());
+    }
+}
+
+function clearAdminAnalyticsDateRange() {
+    const fromEl = document.getElementById('adminAnalyticsFromDate');
+    const toEl = document.getElementById('adminAnalyticsToDate');
+    if (fromEl) fromEl.value = '';
+    if (toEl) toEl.value = '';
+    adminState.analyticsDateRange = { fromDate: '', toDate: '' };
+    console.log('📅 Admin analytics date range cleared');
+    if (adminState.currentWindow === 'analytics' && typeof renderTop5Rankings === 'function') {
+        renderTop5Rankings(getCompleteAdminDataset());
+    }
+}
+
+window.applyAdminAnalyticsDateRange = applyAdminAnalyticsDateRange;
+window.clearAdminAnalyticsDateRange = clearAdminAnalyticsDateRange;
 
 // ============================================
 // I/C LOAD ANALYSIS (Peak vs Min)

@@ -658,7 +658,7 @@ function switchUserTab(tabName) {
     }
     if (tabName === 'recent') {
         document.querySelectorAll('.user-tab-panel').forEach(p => p.classList.remove('active'));
-        document.getElementById('userRecentSubmissionsPanel')?.classList.add('active');
+        document.getElementById('userRecentPanel')?.classList.add('active');
         renderRecentSubmissionsTab();
     }
 }
