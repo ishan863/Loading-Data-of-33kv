@@ -5883,6 +5883,9 @@ async function exportViewAllToExcel() {
             // I/C-2 (8 columns)
             '33KV I/C-2   MAX VOLTAGE (KV)', '33KV I/C-2   MAX VOLTAGE (KV) TIME', '33KV I/C-2   MIN VOLTAGE (KV)', '33KV I/C-2   MIN VOLTAGE (KV)  TIME',
             '33KV I/C-2   MAX LOAD (AMP)', '33KV I/C-2   MAX LOAD (AMP)  TIME', '33KV I/C-2   MIN LOAD (AMP)', '33KV I/C-2   MIN LOAD (AMP)  TIME',
+            // I/C-3 (8 columns)
+            '33KV I/C-3   MAX VOLTAGE (KV)', '33KV I/C-3   MAX VOLTAGE (KV) TIME', '33KV I/C-3   MIN VOLTAGE (KV)', '33KV I/C-3   MIN VOLTAGE (KV)  TIME',
+            '33KV I/C-3   MAX LOAD (AMP)', '33KV I/C-3   MAX LOAD (AMP)  TIME', '33KV I/C-3   MIN LOAD (AMP)', '33KV I/C-3   MIN LOAD (AMP)  TIME',
             // PTR-1 33kv (8 columns)
             'PTR-1 33kv  MAX VOLTAGE (KV)', 'PTR-1 33kv  MAX VOLTAGE (KV) TIME', 'PTR-1 33kv  MIN VOLTAGE (KV)', 'PTR-1 33kv  MIN VOLTAGE (KV)  TIME',
             'PTR-1 33kv  MAX LOAD (AMP)', 'PTR-1 33kv  MAX LOAD (AMP)  TIME', 'PTR-1 33kv  MIN LOAD (AMP)', 'PTR-1 33kv  MIN LOAD (AMP)  TIME',
@@ -5900,7 +5903,7 @@ async function exportViewAllToExcel() {
             'PTR-1 11kv   MAX LOAD (AMP)', 'PTR-1 11kv   MAX LOAD (AMP)  TIME', 'PTR-1 11kv   MIN LOAD (AMP)', 'PTR-1 11kv   MIN LOAD (AMP)  TIME',
             // PTR-2 11kv (8 columns)
             'PTR-2 11kv  MAX VOLTAGE (KV)', 'PTR-2 11kv  MAX VOLTAGE (KV) TIME', 'PTR-2 11kv  MIN VOLTAGE (KV)', 'PTR-2 11kv  MIN VOLTAGE (KV)  TIME',
-            'PTR-2 11kv  MAX LOAD (AMP)', 'PTR-2 11kv  MAX LOAD (AMP)  TIME', 'PTR-2 11kv  MIN LOAD (AMP)', 'MIN LOAD (AMP)  TIME',
+            'PTR-2 11kv  MAX LOAD (AMP)', 'PTR-2 11kv  MAX LOAD (AMP)  TIME', 'PTR-2 11kv  MIN LOAD (AMP)', 'PTR-2 11kv  MIN LOAD (AMP)  TIME',
             // PTR-3 11kv (8 columns)
             'PTR-3 11kv  MAX VOLTAGE (KV)', 'PTR-3 11kv  MAX VOLTAGE (KV) TIME', 'PTR-3 11kv  MIN VOLTAGE (KV)', 'PTR-3 11kv  MIN VOLTAGE (KV)  TIME',
             'PTR-3 11kv  MAX LOAD (AMP)', 'PTR-3 11kv  MAX LOAD (AMP)  TIME', 'PTR-3 11kv  MIN LOAD (AMP)', 'PTR-3 11kv  MIN LOAD (AMP)  TIME',
@@ -5914,17 +5917,18 @@ async function exportViewAllToExcel() {
             'Feeder Name (F4)', 'PTR no (F4)', 'Feeder-4  MAX VOLTAGE (KV)', 'Feeder-4  MAX VOLTAGE (KV) TIME', 'Feeder-4  MIN VOLTAGE (KV)', 'Feeder-4  MIN VOLTAGE (KV)  TIME', 'Feeder-4  MAX LOAD (AMP)', 'Feeder-4  MAX LOAD (AMP)  TIME', 'Feeder-4  MIN LOAD (AMP)', 'Feeder-4  MIN LOAD (AMP)  TIME',
             'Feeder Name (F5)', 'PTR no (F5)', 'Feeder-5  MAX VOLTAGE (KV)', 'Feeder-5  MAX VOLTAGE (KV) TIME', 'Feeder-5  MIN VOLTAGE (KV)', 'Feeder-5  MIN VOLTAGE (KV)  TIME', 'Feeder-5  MAX LOAD (AMP)', 'Feeder-5  MAX LOAD (AMP)  TIME', 'Feeder-5  MIN LOAD (AMP)', 'Feeder-5  MIN LOAD (AMP)  TIME',
             'Feeder Name (F6)', 'PTR no (F6)', 'Feeder-6  MAX VOLTAGE (KV)', 'Feeder-6  MAX VOLTAGE (KV) TIME', 'Feeder-6  MIN VOLTAGE (KV)', 'Feeder-6  MIN VOLTAGE (KV)  TIME', 'Feeder-6  MAX LOAD (AMP)', 'Feeder-6  MAX LOAD (AMP)  TIME', 'Feeder-6  MIN LOAD (AMP)', 'Feeder-6  MIN LOAD (AMP)  TIME',
+            'Feeder Name (F7)', 'PTR no (F7)', 'Feeder-7  MAX VOLTAGE (KV)', 'Feeder-7  MAX VOLTAGE (KV) TIME', 'Feeder-7  MIN VOLTAGE (KV)', 'Feeder-7  MIN VOLTAGE (KV)  TIME', 'Feeder-7  MAX LOAD (AMP)', 'Feeder-7  MAX LOAD (AMP)  TIME', 'Feeder-7  MIN LOAD (AMP)', 'Feeder-7  MIN LOAD (AMP)  TIME',
             // Station Transformer (8 columns)
             'Station Transformer   MAX VOLTAGE (KV)', 'Station Transformer   MAX VOLTAGE (KV) TIME',
             'Station Transformer   MIN VOLTAGE (KV)', 'Station Transformer   MIN VOLTAGE (KV)  TIME',
             'Station Transformer   MAX LOAD (AMP)', 'Station Transformer   MAX LOAD (AMP)  TIME',
-            'Station Transformer   MIN LOAD (AMP)', 'MIN LOAD (AMP)  TIME',
+            'Station Transformer   MIN LOAD (AMP)', 'Station Transformer   MIN LOAD (AMP)  TIME',
             // Charger (9 columns)
             'PTR no (Charger)',
             'CHARGER 48/24V  MAX VOLTAGE (KV)', 'CHARGER 48/24V  MAX VOLTAGE (KV) TIME',
             'CHARGER 48/24V  MIN VOLTAGE (KV)', 'CHARGER 48/24V  MIN VOLTAGE (KV)  TIME',
             'CHARGER 48/24V  MAX LOAD (AMP)', 'CHARGER 48/24V  MAX LOAD (AMP)  TIME',
-            'CHARGER 48/24V  LOAD (AMP)', 'CHARGER 48/24V  MIN LOAD (AMP)  TIME',
+            'CHARGER 48/24V  MIN LOAD (AMP)', 'CHARGER 48/24V  MIN LOAD (AMP)  TIME',
             'Total Max Load (AMP)', 'Total Min Load (AMP)'
         ];
 
@@ -5961,6 +5965,11 @@ async function exportViewAllToExcel() {
                 entry.ic2?.minVoltage || '', entry.ic2?.minVoltageTime || '',
                 entry.ic2?.maxLoad || '', entry.ic2?.maxLoadTime || '',
                 entry.ic2?.minLoad || '', entry.ic2?.minLoadTime || '',
+                // I/C-3
+                entry.ic3?.maxVoltage || '', entry.ic3?.maxVoltageTime || '',
+                entry.ic3?.minVoltage || '', entry.ic3?.minVoltageTime || '',
+                entry.ic3?.maxLoad || '', entry.ic3?.maxLoadTime || '',
+                entry.ic3?.minLoad || '', entry.ic3?.minLoadTime || '',
                 // PTR-1 33kv
                 entry.ptr1_33kv?.maxVoltage || '', entry.ptr1_33kv?.maxVoltageTime || '',
                 entry.ptr1_33kv?.minVoltage || '', entry.ptr1_33kv?.minVoltageTime || '',
@@ -6003,8 +6012,8 @@ async function exportViewAllToExcel() {
                 entry.ptr4_11kv?.minLoad || '', entry.ptr4_11kv?.minLoadTime || ''
             ];
             
-            // Add feeder data (6 feeders � 10 columns = 60 columns)
-            for (let i = 1; i <= 6; i++) {
+            // Add feeder data (7 feeders × 10 columns = 70 columns)
+            for (let i = 1; i <= 7; i++) {
                 const feederKey = `Feeder-${i}`;
                 const feeder = entry.feeders?.[feederKey];
                 
@@ -6023,7 +6032,7 @@ async function exportViewAllToExcel() {
                     );
                 } else {
                     // Empty feeder data
-                    row.push('', '', '', '', '', '', '', '', '');
+                    row.push('', '', '', '', '', '', '', '', '', '');
                 }
             }
             
