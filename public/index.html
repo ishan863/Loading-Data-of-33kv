@@ -1941,123 +1941,100 @@
         </script>
     </div>
 
-    <!-- ==================== USER DASHBOARD ==================== -->
-    <div id="userDashboardScreen" class="screen">
-        <!-- User Header -->
-        <div class="user-header">
-            <div class="user-header-left">
-                <div class="user-avatar">K</div>
-                <div class="user-welcome">
-                    <h1>Welcome, User!</h1>
-                    <p>Ready to submit yesterday's data?</p>
-                </div>
-            </div>
-            <div class="user-header-right">
-                <button class="btn-new-entry" onclick="openNewEntryForm()">
-                    <span>+ New Entry</span>
-                </button>
-                <button class="btn-logout" onclick="logout()">
-                    <span>Logout</span>
-                </button>
+<!-- ==================== USER DASHBOARD ==================== -->
+<div id="userDashboardScreen" class="screen">
+    <!-- User Header with Profile -->
+    <div class="user-header">
+        <div class="user-header-left">
+            <div class="user-avatar" id="userAvatar" onclick="toggleProfileCard()">U</div>
+            <div class="user-welcome">
+                <h1 id="userWelcomeName">Welcome, User!</h1>
+                <p id="userWelcomeSubtitle">Ready to submit data?</p>
             </div>
         </div>
-
-        <!-- User Main Content -->
-        <div class="user-main-content">
-            <!-- User Tabs -->
-            <div class="user-tabs" role="tablist" aria-label="User dashboard sections">
-                <button type="button" class="user-tab active" data-user-tab="dashboard" role="tab" aria-selected="true">📊 Dashboard</button>
-                <button type="button" class="user-tab" data-user-tab="calendar" role="tab" aria-selected="false">📅 Calendar</button>
-                <button type="button" class="user-tab" data-user-tab="recent" role="tab" aria-selected="false">📋 Recent Submissions</button>
+        <div class="user-header-right">
+            <button class="btn-new-entry" onclick="openNewEntryForm()">
+                <span>+ New Entry</span>
+            </button>
+            <button class="btn-logout" onclick="logout()">
+                <span>Logout</span>
+            </button>
+        </div>
+        <!-- User Profile Card -->
+        <div class="user-profile-card" id="userProfileCard" style="display:none;">
+            <div class="profile-header">
+                <div class="profile-avatar" id="profileAvatar">U</div>
+                <div class="profile-info">
+                    <div class="profile-name" id="profileName">User Name</div>
+                    <div class="profile-role">PSS Operator</div>
+                </div>
             </div>
+            <div class="profile-stats">
+                <div class="profile-stat">
+                    <div class="profile-stat-value" id="profileStatTotal">0</div>
+                    <div class="profile-stat-label">Total Submissions</div>
+                </div>
+                <div class="profile-stat">
+                    <div class="profile-stat-value" id="profileStatMonth">0</div>
+                    <div class="profile-stat-label">This Month</div>
+                </div>
+            </div>
+            <div class="profile-actions">
+                <button class="profile-btn" onclick="closeProfileCard(); openNewEntryForm();"><span>📝 New Entry</span></button>
+                <button class="profile-btn" onclick="closeProfileCard(); switchBottomNavTab('calendar');"><span>📅 Calendar</span></button>
+                <button class="profile-btn" onclick="closeProfileCard(); switchBottomNavTab('recent');"><span>📋 Recent</span></button>
+            </div>
+            <div class="profile-footer">
+                <button class="btn-logout" onclick="logout()"><span>Sign Out</span></button>
+            </div>
+        </div>
+    </div>
 
-            <div id="userDashboardPanel" class="user-tab-panel active" role="tabpanel">
+    <!-- User Main Content -->
+    <div class="user-main-content">
+        <!-- Dashboard Panel -->
+        <div id="userDashboardPanel" class="user-tab-panel active" role="tabpanel">
             <!-- Stats Cards -->
             <div class="stats-grid">
                 <div class="stat-card" data-stat-id="total-submissions">
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #10b981, #059669);">
-                        <span class="stat-icon-wrapper">📊</span>
-                    </div>
-                    <div class="stat-info">
-                        <h3 class="stat-number">0</h3>
-                        <p class="stat-label">Total Submissions</p>
-                    </div>
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #10b981, #059669);"><span class="stat-icon-wrapper">📊</span></div>
+                    <div class="stat-info"><h3 class="stat-number">0</h3><p class="stat-label">Total Submissions</p></div>
                 </div>
                 <div class="stat-card" data-stat-id="month-submissions">
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed);">
-                        <span class="stat-icon-wrapper">✅</span>
-                    </div>
-                    <div class="stat-info">
-                        <h3 class="stat-number">0</h3>
-                        <p class="stat-label">This Month</p>
-                    </div>
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed);"><span class="stat-icon-wrapper">✅</span></div>
+                    <div class="stat-info"><h3 class="stat-number">0</h3><p class="stat-label">This Month</p></div>
                 </div>
                 <div class="stat-card" data-stat-id="submission-streak">
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
-                        <span class="stat-icon-wrapper">🔥</span>
-                    </div>
-                    <div class="stat-info">
-                        <h3 class="stat-number">0</h3>
-                        <p class="stat-label">Day Streak</p>
-                    </div>
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706);"><span class="stat-icon-wrapper">🔥</span></div>
+                    <div class="stat-info"><h3 class="stat-number">0</h3><p class="stat-label">Day Streak</p></div>
                 </div>
                 <div class="stat-card" data-stat-id="last-submission">
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #06b6d4, #0891b2);">
-                        <span class="stat-icon-wrapper">⏰</span>
-                    </div>
-                    <div class="stat-info">
-                        <h3 class="stat-number">Never</h3>
-                        <p class="stat-label">Last Submission</p>
-                    </div>
+                    <div class="stat-icon" style="background: linear-gradient(135deg, #06b6d4, #0891b2);"><span class="stat-icon-wrapper">⏰</span></div>
+                    <div class="stat-info"><h3 class="stat-number">Never</h3><p class="stat-label">Last Submission</p></div>
                 </div>
             </div>
 
             <!-- PSS Statistics Section -->
             <div class="dashboard-section" id="pssStatsSection" style="animation: fadeInUp 0.5s ease-out;">
                 <h2>📈 PSS Statistics Dashboard</h2>
-                
-                <!-- PSS Stats Grid -->
                 <div class="stats-grid pss-stats-grid">
                     <div class="stat-card" style="animation: fadeInUp 0.5s ease-out 0.1s both;">
-                        <div class="stat-icon" style="background: linear-gradient(135deg, #3b82f6, #2563eb);">
-                            <span>📦</span>
-                        </div>
-                        <div class="stat-info">
-                            <h3 id="pssTotalSubmissions">0</h3>
-                            <p>Total Submissions (PSS)</p>
-                        </div>
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #3b82f6, #2563eb);"><span>📦</span></div>
+                        <div class="stat-info"><h3 id="pssTotalSubmissions">0</h3><p>Total Submissions (PSS)</p></div>
                     </div>
                     <div class="stat-card" style="animation: fadeInUp 0.5s ease-out 0.2s both;">
-                        <div class="stat-icon" style="background: linear-gradient(135deg, #ef4444, #dc2626);">
-                            <span>🔴</span>
-                        </div>
-                        <div class="stat-info" id="pssFeeder1Peak" style="transition: all 0.3s ease; opacity: 1; transform: translateY(0);">
-                            <div style="font-size: 24px; font-weight: 700; color: #ef4444;">0.00 A</div>
-                            <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 0.25rem;">@ --:-- | 0.00 kV</div>
-                            <p style="margin-top: 0.5rem; font-size: 13px; font-weight: 600;">⚡ Peak Load (Today)</p>
-                        </div>
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #ef4444, #dc2626);"><span>🔴</span></div>
+                        <div class="stat-info" id="pssFeeder1Peak"><div style="font-size: 24px; font-weight: 700; color: #ef4444;">0.00 A</div><div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 0.25rem;">@ --:-- | 0.00 kV</div><p style="margin-top: 0.5rem; font-size: 13px; font-weight: 600;">⚡ Peak Load (Today)</p></div>
                     </div>
                     <div class="stat-card" style="animation: fadeInUp 0.5s ease-out 0.3s both;">
-                        <div class="stat-icon" style="background: linear-gradient(135deg, #3b82f6, #2563eb);">
-                            <span>🔵</span>
-                        </div>
-                        <div class="stat-info" id="pssFeeder1Min" style="transition: all 0.3s ease; opacity: 1; transform: translateY(0);">
-                            <div style="font-size: 24px; font-weight: 700; color: #3b82f6;">0.00 A</div>
-                            <div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 0.25rem;">@ --:-- | 0.00 kV</div>
-                            <p style="margin-top: 0.5rem; font-size: 13px; font-weight: 600;">⚡ Min Load (Today)</p>
-                        </div>
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #3b82f6, #2563eb);"><span>🔵</span></div>
+                        <div class="stat-info" id="pssFeeder1Min"><div style="font-size: 24px; font-weight: 700; color: #3b82f6;">0.00 A</div><div style="font-size: 12px; color: rgba(255,255,255,0.7); margin-top: 0.25rem;">@ --:-- | 0.00 kV</div><p style="margin-top: 0.5rem; font-size: 13px; font-weight: 600;">⚡ Min Load (Today)</p></div>
                     </div>
                     <div class="stat-card" style="animation: fadeInUp 0.5s ease-out 0.4s both;">
-                        <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
-                            <span>👥</span>
-                        </div>
-                        <div class="stat-info">
-                            <h3 id="pssActiveStaff">0</h3>
-                            <p>Active Staff Members</p>
-                        </div>
+                        <div class="stat-icon" style="background: linear-gradient(135deg, #f59e0b, #d97706);"><span>👥</span></div>
+                        <div class="stat-info"><h3 id="pssActiveStaff">0</h3><p>Active Staff Members</p></div>
                     </div>
                 </div>
-                
                 <!-- Top Performers Leaderboard -->
                 <div style="margin-top: 1.5rem; animation: fadeInUp 0.5s ease-out 0.5s both;">
                     <h3 style="color: rgba(255,255,255,0.9); margin-bottom: 1rem; font-size: 18px;">🏆 Top Performers (Submission Count)</h3>
@@ -2067,127 +2044,76 @@
                 </div>
             </div>
 
-            <!-- Recent Submissions -->
+            <!-- Recent Submissions (on dashboard) -->
             <div class="dashboard-section" style="animation: fadeInUp 0.5s ease-out 0.6s both;">
                 <h2>📋 Recent Submissions <span id="submissionCount" style="font-size: 14px; background: rgba(59,130,246,0.2); color: #60a5fa; padding: 0.25rem 0.75rem; border-radius: 12px; margin-left: 0.5rem;">0</span></h2>
-                
-                <!-- Filter Controls for Recent Submissions -->
-                <div class="submission-filters" style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: flex-end; animation: fadeInUp 0.3s ease-out;">
+                <div class="submission-filters" style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: flex-end;">
                     <div style="flex: 1; min-width: 150px;">
                         <label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">👤 Staff</label>
-                        <select id="staffFilter" class="form-control" onchange="applySubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px; cursor: pointer; transition: all 0.3s ease;">
-                            <option value="all">All Staff</option>
-                        </select>
+                        <select id="staffFilter" class="form-control" onchange="applySubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px;"><option value="all">All Staff</option></select>
                     </div>
                     <div style="flex: 1; min-width: 150px;">
                         <label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">📅 From Date</label>
-                        <input type="date" id="submissionFromDate" class="form-control" onchange="applySubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px; transition: all 0.3s ease;">
+                        <input type="date" id="submissionFromDate" class="form-control" onchange="applySubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px;">
                     </div>
                     <div style="flex: 1; min-width: 150px;">
                         <label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">📅 To Date</label>
-                        <input type="date" id="submissionToDate" class="form-control" onchange="applySubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px; transition: all 0.3s ease;">
+                        <input type="date" id="submissionToDate" class="form-control" onchange="applySubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px;">
                     </div>
-                    <div style="display: flex; gap: 0.5rem;">
-                        <button class="btn-secondary" onclick="clearSubmissionFilters()" style="padding: 0.6rem 1rem; font-size: 13px; border-radius: 8px; transition: all 0.3s ease;">🔄 Clear</button>
-                    </div>
+                    <div style="display: flex; gap: 0.5rem;"><button class="btn-secondary" onclick="clearSubmissionFilters()" style="padding: 0.6rem 1rem; font-size: 13px; border-radius: 8px;">🔄 Clear</button></div>
                 </div>
-                
                 <div id="recentSubmissionsContainer" class="submissions-list">
                     <p style="text-align: center; color: rgba(255,255,255,0.6); padding: 2rem;">No submissions yet. Click "+ New Entry" to submit your first data.</p>
-            </div>
-            <!-- /Calendar panel -->
-
-            <!-- Recent Submissions panel -->
-            <div id="userRecentPanel" class="user-tab-panel" role="tabpanel">
-                <div class="dashboard-section recent-submissions-section">
-                    <div class="recent-submissions-header">
-                        <h2>📋 Recent Submissions <span id="recentSubmissionBadge">0 / 0</span></h2>
-                        <div id="recentTopPerformer" class="recent-top-performer"></div>
-                    </div>
-
-                    <!-- Filters -->
-                    <div class="submission-filters" style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: flex-end;">
-                        <div style="flex: 1; min-width: 160px;">
-                            <label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">👤 Staff</label>
-                            <select id="recentStaffFilter" class="form-control" onchange="applyRecentSubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px;">
-                                <option value="all">All Staff</option>
-                            </select>
-                        </div>
-                        <div style="flex: 1; min-width: 160px;">
-                            <label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">📅 From Date</label>
-                            <input type="date" id="recentFromDate" class="form-control" onchange="applyRecentSubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px;">
-                        </div>
-                        <div style="flex: 1; min-width: 160px;">
-                            <label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">📅 To Date</label>
-                            <input type="date" id="recentToDate" class="form-control" onchange="applyRecentSubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px;">
-                        </div>
-                        <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
-                            <button type="button" class="btn-secondary" onclick="clearRecentSubmissionFilters()" style="padding: 0.6rem 1rem; font-size: 13px; border-radius: 8px;">🔄 Clear</button>
-                        </div>
-                    </div>
-
-                    <div id="recentSubmissionsTableContainer"></div>
-
-                    <!-- Pagination -->
-                    <div class="recent-submissions-pagination" style="display: flex; align-items: center; justify-content: space-between; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1);">
-                        <button type="button" class="btn-secondary" onclick="prevRecentSubmissionPage()" id="recentBtnPrev">‹ Prev</button>
-                        <span id="recentSubmissionPageInfo" style="color: #93c5fd; font-weight: 700;">Page 1 of 1</span>
-                        <button type="button" class="btn-secondary" onclick="nextRecentSubmissionPage()" id="recentBtnNext">Next ›</button>
-                    </div>
-                </div>
-            </div>
-            <!-- /Recent Submissions panel -->
-        </div>
-    </div>
-
-            <!-- /Dashboard panel -->
-
-            <!-- Calendar panel -->
-            <div id="userCalendarPanel" class="user-tab-panel" role="tabpanel">
-                <div class="dashboard-section user-calendar-section">
-                    <div class="user-calendar-head">
-                        <div>
-                            <h2>📅 Submission Calendar</h2>
-                            <p class="user-calendar-subtitle" id="userCalendarSubtitle">Month-wise record of submitted loading data</p>
-                        </div>
-                        <div class="user-calendar-actions">
-                            <div class="user-calendar-scope" role="group" aria-label="Calendar scope">
-                                <button type="button" class="calendar-scope-btn active" data-calendar-scope="mine">👤 My Entries</button>
-                                <button type="button" class="calendar-scope-btn" data-calendar-scope="station">🏭 My PSS</button>
-                            </div>
-                            <button type="button" class="btn-secondary user-calendar-refresh" onclick="refreshUserCalendar()">🔄 Refresh</button>
-                        </div>
-                    </div>
-
-                    <div class="calendar-header user-calendar-header">
-                        <h3 class="calendar-month" id="userCalendarMonth">—</h3>
-                        <div class="calendar-nav">
-                            <button type="button" class="btn-calendar-nav" onclick="shiftUserCalendarMonth(-1)" aria-label="Previous month">‹</button>
-                            <button type="button" class="btn-calendar-nav user-calendar-today" onclick="goToUserCalendarToday()">Today</button>
-                            <button type="button" class="btn-calendar-nav" onclick="shiftUserCalendarMonth(1)" aria-label="Next month">›</button>
-                        </div>
-                    </div>
-
-                    <!-- Staff Filter -->
-                    <div class="user-calendar-staff">
-                        <div class="staff-filter-group">
-                            <label class="staff-filter-label">👤 Staff:</label>
-                            <button type="button" class="staff-chip active" data-staff="all" onclick="setCalendarStaffFilter('all')">All Staff</button>
-                            <div id="calendarStaffChips" class="staff-chips"></div>
-                        </div>
-                    </div>
-
-                    <div class="user-calendar-weekdays" aria-hidden="true">
-                        <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
-                    </div>
-                    <div id="userCalendarGrid" class="user-calendar-grid" role="grid" aria-label="Submission calendar"></div>
-
-                    <div id="userCalendarSummary" class="user-calendar-summary"></div>
-                    <div id="userCalendarDetails" class="user-calendar-details" aria-live="polite"></div>
                 </div>
             </div>
         </div>
+        <!-- /Dashboard Panel -->
+
+        <!-- Calendar Panel -->
+        <div id="userCalendarPanel" class="user-tab-panel" role="tabpanel">
+            <div class="dashboard-section user-calendar-section">
+                <div class="user-calendar-head">
+                    <div><h2>📅 Submission Calendar</h2><p class="user-calendar-subtitle" id="userCalendarSubtitle">Month-wise record of submitted loading data</p></div>
+                    <div class="user-calendar-actions">
+                        <div class="user-calendar-scope" role="group" aria-label="Calendar scope"><button type="button" class="calendar-scope-btn active" data-calendar-scope="mine">👤 My Entries</button><button type="button" class="calendar-scope-btn" data-calendar-scope="station">🏭 My PSS</button></div>
+                        <button type="button" class="btn-secondary user-calendar-refresh" onclick="refreshUserCalendar()">🔄 Refresh</button>
+                    </div>
+                </div>
+                <div class="calendar-header user-calendar-header"><h3 class="calendar-month" id="userCalendarMonth">—</h3><div class="calendar-nav"><button type="button" class="btn-calendar-nav" onclick="shiftUserCalendarMonth(-1)">‹</button><button type="button" class="btn-calendar-nav user-calendar-today" onclick="goToUserCalendarToday()">Today</button><button type="button" class="btn-calendar-nav" onclick="shiftUserCalendarMonth(1)">›</button></div></div>
+                <div class="user-calendar-staff"><div class="staff-filter-group"><label class="staff-filter-label">👤 Staff:</label><button type="button" class="staff-chip active" data-staff="all" onclick="setCalendarStaffFilter('all')">All Staff</button><div id="calendarStaffChips" class="staff-chips"></div></div></div>
+                <div class="user-calendar-weekdays" aria-hidden="true"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div>
+                <div id="userCalendarGrid" class="user-calendar-grid" role="grid" aria-label="Submission calendar"></div>
+                <div id="userCalendarSummary" class="user-calendar-summary"></div>
+                <div id="userCalendarDetails" class="user-calendar-details" aria-live="polite"></div>
+            </div>
+        </div>
+        <!-- /Calendar Panel -->
+
+        <!-- Recent Submissions Panel -->
+        <div id="userRecentPanel" class="user-tab-panel" role="tabpanel">
+            <div class="dashboard-section recent-submissions-section">
+                <div class="recent-submissions-header"><h2>📋 Recent Submissions <span id="recentSubmissionBadge">0 / 0</span></h2><div id="recentTopPerformer" class="recent-top-performer"></div></div>
+                <div class="submission-filters" style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: flex-end;">
+                    <div style="flex: 1; min-width: 160px;"><label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">👤 Staff</label><select id="recentStaffFilter" class="form-control" onchange="applyRecentSubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px;"><option value="all">All Staff</option></select></div>
+                    <div style="flex: 1; min-width: 160px;"><label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">📅 From Date</label><input type="date" id="recentFromDate" class="form-control" onchange="applyRecentSubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px;"></div>
+                    <div style="flex: 1; min-width: 160px;"><label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">📅 To Date</label><input type="date" id="recentToDate" class="form-control" onchange="applyRecentSubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px;"></div>
+                    <div style="display: flex; gap: 0.5rem; align-items: flex-end;"><button type="button" class="btn-secondary" onclick="clearRecentSubmissionFilters()" style="padding: 0.6rem 1rem; font-size: 13px; border-radius: 8px;">🔄 Clear</button></div>
+                </div>
+                <div id="recentSubmissionsTableContainer"></div>
+                <div class="recent-submissions-pagination" style="display: flex; align-items: center; justify-content: space-between; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1);"><button type="button" class="btn-secondary" onclick="prevRecentSubmissionPage()" id="recentBtnPrev">‹ Prev</button><span id="recentSubmissionPageInfo" style="color: #93c5fd; font-weight: 700;">Page 1 of 1</span><button type="button" class="btn-secondary" onclick="nextRecentSubmissionPage()" id="recentBtnNext">Next ›</button></div>
+            </div>
+        </div>
+        <!-- /Recent Submissions Panel -->
     </div>
+    <!-- /User Main Content -->
+
+    <!-- Bottom Navigation -->
+    <nav class="user-bottom-nav">
+        <button class="nav-item active" data-nav-tab="dashboard" onclick="switchBottomNavTab('dashboard')"><span class="nav-icon">📊</span><span class="nav-label">Dashboard</span></button>
+        <button class="nav-item" data-nav-tab="calendar" onclick="switchBottomNavTab('calendar')"><span class="nav-icon">📅</span><span class="nav-label">Calendar</span></button>
+        <button class="nav-item" data-nav-tab="recent" onclick="switchBottomNavTab('recent')"><span class="nav-icon">📋</span><span class="nav-label">Recent</span></button>
+    </nav>
+</div>
 
     <!-- ==================== NEW ENTRY FORM MODAL (MULTI-STEP WIZARD) ==================== -->
     <div id="newEntryModal" class="modal-overlay" style="display: none;">

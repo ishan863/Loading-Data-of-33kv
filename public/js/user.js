@@ -682,6 +682,39 @@ function switchUserTab(tabName) {
 }
 window.switchUserTab = switchUserTab;
 
+function switchBottomNavTab(tabName) {
+    if (!tabName) return;
+    document.querySelectorAll('.nav-item').forEach(btn => {
+        const active = btn.dataset.navTab === tabName;
+        btn.classList.toggle('active', active);
+    });
+    document.querySelectorAll('.user-tab-panel').forEach(panel => {
+        panel.classList.toggle('active', panel.id === `user${tabName.charAt(0).toUpperCase() + tabName.slice(1)}Panel`);
+    });
+    if (tabName === 'calendar') {
+        userState.calendarRangeFrom = '';
+        userState.calendarRangeTo = '';
+        clearRangeInputs();
+        loadUserCalendarData().then(() => renderUserCalendar());
+    }
+    if (tabName === 'recent') {
+        renderRecentSubmissionsTab();
+    }
+}
+window.switchBottomNavTab = switchBottomNavTab;
+
+function toggleProfileCard() {
+    const card = document.getElementById('userProfileCard');
+    if (card) card.style.display = card.style.display === 'block' ? 'none' : 'block';
+}
+window.toggleProfileCard = toggleProfileCard;
+
+function closeProfileCard() {
+    const card = document.getElementById('userProfileCard');
+    if (card) card.style.display = 'none';
+}
+window.closeProfileCard = closeProfileCard;
+
 async function loadUserCalendarData(force = false) {
     if (!force && userState.pssSubmissions.length > 0) return;
     await updatePSSStats();
