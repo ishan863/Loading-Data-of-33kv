@@ -2719,4 +2719,112 @@
     }
 }
 
+/* ===== RECENT SUBMISSIONS TAB STYLES ===== */
+.recent-submissions-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.recent-submissions-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.recent-submissions-header h2 {
+    margin: 0;
+    font-size: 20px;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.recent-submissions-header h2 span {
+    background: rgba(59, 130, 246, 0.15);
+    color: #93c5fd;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 700;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.recent-top-performer {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.85);
+    font-weight: 600;
+    margin-top: 0.25rem;
+}
+
+.recent-submissions-table-wrap {
+    overflow-x: auto;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.recent-submissions-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+.recent-submissions-table th {
+    text-align: left;
+    padding: 0.75rem 1rem;
+    color: rgba(255, 255, 255, 0.6);
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.recent-submissions-table td {
+    padding: 0.75rem 1rem;
+    color: #e2e8f0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.recent-submissions-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.recent-submissions-table tbody tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.recent-submissions-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.recent-submissions-pagination .btn-secondary {
+    padding: 0.5rem 1rem;
+    font-size: 13px;
+}
+
+@media (max-width: 640px) {
+    .recent-submissions-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .recent-submissions-pagination {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .recent-submissions-pagination .btn-secondary {
+        width: 100%;
+    }
+}
+
 

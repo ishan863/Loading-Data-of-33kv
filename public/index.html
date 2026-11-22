@@ -10,8 +10,8 @@
     <title>Loading Data Management App - Raja Patel</title>
     <link rel="stylesheet" href="css/loading.css?v=101">
     <link rel="stylesheet" href="css/login.css?v=101">
-    <link rel="stylesheet" href="css/admin.css?v=103">
-    <link rel="stylesheet" href="css/user.css?v=103">
+    <link rel="stylesheet" href="css/admin.css?v=104">
+    <link rel="stylesheet" href="css/user.css?v=104">
     <link rel="stylesheet" href="css/form.css?v=101">
     <link rel="stylesheet" href="css/custom-select.css?v=101">
     <link rel="stylesheet" href="css/dashboard-analytics.css?v=101">
@@ -1958,6 +1958,7 @@
             <div class="user-tabs" role="tablist" aria-label="User dashboard sections">
                 <button type="button" class="user-tab active" data-user-tab="dashboard" role="tab" aria-selected="true">📊 Dashboard</button>
                 <button type="button" class="user-tab" data-user-tab="calendar" role="tab" aria-selected="false">📅 Calendar</button>
+                <button type="button" class="user-tab" data-user-tab="recent" role="tab" aria-selected="false">📋 Recent Submissions</button>
             </div>
 
             <div id="userDashboardPanel" class="user-tab-panel active" role="tabpanel">
@@ -2083,9 +2084,52 @@
                 
                 <div id="recentSubmissionsContainer" class="submissions-list">
                     <p style="text-align: center; color: rgba(255,255,255,0.6); padding: 2rem;">No submissions yet. Click "+ New Entry" to submit your first data.</p>
+            </div>
+            <!-- /Calendar panel -->
+
+            <!-- Recent Submissions panel -->
+            <div id="userRecentSubmissionsPanel" class="user-tab-panel" role="tabpanel">
+                <div class="dashboard-section recent-submissions-section">
+                    <div class="recent-submissions-header">
+                        <h2>📋 Recent Submissions <span id="recentSubmissionBadge">0 / 0</span></h2>
+                        <div id="recentTopPerformer" class="recent-top-performer"></div>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="submission-filters" style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: flex-end;">
+                        <div style="flex: 1; min-width: 160px;">
+                            <label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">👤 Staff</label>
+                            <select id="recentStaffFilter" class="form-control" onchange="applyRecentSubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px;">
+                                <option value="all">All Staff</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1; min-width: 160px;">
+                            <label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">📅 From Date</label>
+                            <input type="date" id="recentFromDate" class="form-control" onchange="applyRecentSubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px;">
+                        </div>
+                        <div style="flex: 1; min-width: 160px;">
+                            <label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">📅 To Date</label>
+                            <input type="date" id="recentToDate" class="form-control" onchange="applyRecentSubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px;">
+                        </div>
+                        <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
+                            <button type="button" class="btn-secondary" onclick="clearRecentSubmissionFilters()" style="padding: 0.6rem 1rem; font-size: 13px; border-radius: 8px;">🔄 Clear</button>
+                        </div>
+                    </div>
+
+                    <div id="recentSubmissionsTableContainer"></div>
+
+                    <!-- Pagination -->
+                    <div class="recent-submissions-pagination" style="display: flex; align-items: center; justify-content: space-between; margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,0.1);">
+                        <button type="button" class="btn-secondary" onclick="prevRecentSubmissionPage()" id="recentBtnPrev">‹ Prev</button>
+                        <span id="recentSubmissionPageInfo" style="color: #93c5fd; font-weight: 700;">Page 1 of 1</span>
+                        <button type="button" class="btn-secondary" onclick="nextRecentSubmissionPage()" id="recentBtnNext">Next ›</button>
+                    </div>
                 </div>
             </div>
-            </div>
+            <!-- /Recent Submissions panel -->
+        </div>
+    </div>
+
             <!-- /Dashboard panel -->
 
             <!-- Calendar panel -->
@@ -2296,10 +2340,10 @@
     <script src="js/new-dashboard-analytics.js?v=101"></script>
     <script src="js/new-analytics.js?v=101"></script>
     <script src="js/chatbot.js?v=101"></script>
-    <script src="js/admin.js?v=103"></script>
+    <script src="js/admin.js?v=104"></script>
     <script src="js/attendance.js?v=102"></script>
     <script src="js/custom-select.js?v=101"></script>
-    <script src="js/user.js?v=103"></script>
+    <script src="js/user.js?v=104"></script>
     <!-- form-handler.js removed - using wizard in user.js -->
 
 </body>

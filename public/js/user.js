@@ -15,6 +15,9 @@ const userState = {
     calendarSelectedDate: '',
     calendarRangeFrom: '',
     calendarRangeTo: '',
+    // Submission history pagination
+    submissionPage: 1,
+    submissionPageSize: 10,
     // New filter state
     submissionFilters: {
         staff: 'all',
@@ -419,6 +422,26 @@ function updateQuickStat(statId, value, icon) {
     }
 }
 
+// ============================================
+// SUBMISSION FILTERING HELPER
+// ============================================
+
+function getFilteredSubmissions() {
+    let filtered = [...userState.mySubmissions];
+    if (userState.submissionFilters.staff !== 'all') {
+        filtered = filtered.filter(sub => sub.staffName === userState.submissionFilters.staff);
+    }
+    if (userState.submissionFilters.fromDate) {
+        filtered = filtered.filter(sub => sub.date >= userState.submissionFilters.fromDate);
+    }
+    if (userState.submissionFilters.toDate) {
+        filtered = filtered.filter(sub => sub.date <= userState.submissionFilters.toDate);
+    }
+    // Newest first
+    filtered.sort((a, b) => entrySortValue(b) - entrySortValue(a));
+    return filtered;
+}
+
 function renderSubmissionHistory() {
     const listContainer = document.getElementById('recentSubmissionsContainer');
     console.log('📋 Rendering submission history...');
@@ -432,31 +455,10 @@ function renderSubmissionHistory() {
     
     // Populate staff filter dropdown
     populateStaffFilter();
-    
-    // Apply filters to submissions
-    let filteredSubmissions = [...userState.mySubmissions];
-    
-    // Filter by staff
-    if (userState.submissionFilters.staff !== 'all') {
-        filteredSubmissions = filteredSubmissions.filter(sub => 
-            sub.staffName === userState.submissionFilters.staff
-        );
-    }
-    
-    // Filter by from date
-    if (userState.submissionFilters.fromDate) {
-        filteredSubmissions = filteredSubmissions.filter(sub => 
-            sub.date >= userState.submissionFilters.fromDate
-        );
-    }
-    
-    // Filter by to date
-    if (userState.submissionFilters.toDate) {
-        filteredSubmissions = filteredSubmissions.filter(sub => 
-            sub.date <= userState.submissionFilters.toDate
-        );
-    }
-    
+
+    // Apply filters to submissions (shared helper)
+    let filteredSubmissions = getFilteredSubmissions();
+
     // Update submission count badge
     const countBadge = document.getElementById('submissionCount');
     if (countBadge) {
@@ -468,9 +470,9 @@ function renderSubmissionHistory() {
             countBadge.textContent = totalCount;
         }
     }
-    
-    // Get recent submissions (last 10 after filtering)
-    const recentSubmissions = filteredSubmissions.slice(0, 10);
+
+    // Show first page only on dashboard
+    const recentSubmissions = filteredSubmissions.slice(0, userState.submissionPageSize);
     console.log('  Showing filtered:', recentSubmissions.length, 'of', filteredSubmissions.length);
     
     if (recentSubmissions.length === 0) {
@@ -645,6 +647,11 @@ function switchUserTab(tabName) {
         userState.calendarRangeTo = '';
         clearRangeInputs();
         loadUserCalendarData().then(() => renderUserCalendar());
+    }
+    if (tabName === 'recent') {
+        document.querySelectorAll('.user-tab-panel').forEach(p => p.classList.remove('active'));
+        document.getElementById('userRecentSubmissionsPanel')?.classList.add('active');
+        renderRecentSubmissionsTab();
     }
 }
 window.switchUserTab = switchUserTab;
@@ -875,6 +882,160 @@ function viewCalendarEntry(entryId) {
     showSubmissionDetails(entry);
 }
 window.viewCalendarEntry = viewCalendarEntry;
+
+// ============================================
+// RECENT SUBMISSIONS TAB (PAGINATED)
+// ============================================
+
+function computeTopPerformer(filtered) {
+    const counts = {};
+    filtered.forEach(sub => {
+        const name = sub.staffName || 'Unknown';
+        counts[name] = (counts[name] || 0) + 1;
+    });
+    let topName = '—', topCount = 0;
+    Object.entries(counts).forEach(([name, c]) => {
+        if (c > topCount) { topCount = c; topName = name; }
+    });
+    return { name: topName, count: topCount };
+}
+
+function renderRecentSubmissionsTab() {
+    const container = document.getElementById('recentSubmissionsTableContainer');
+    const badge = document.getElementById('recentSubmissionBadge');
+    const pageInfo = document.getElementById('recentSubmissionPageInfo');
+    const btnPrev = document.getElementById('recentBtnPrev');
+    const btnNext = document.getElementById('recentBtnNext');
+    const topPerformerEl = document.getElementById('recentTopPerformer');
+    if (!container) return;
+
+    const filtered = getFilteredSubmissions();
+    const totalCount = filtered.length;
+    const pageSize = userState.submissionPageSize || 10;
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+    if (userState.submissionPage > totalPages) userState.submissionPage = totalPages;
+    if (userState.submissionPage < 1) userState.submissionPage = 1;
+
+    const start = (userState.submissionPage - 1) * pageSize;
+    const pageSubmissions = filtered.slice(start, start + pageSize);
+
+    if (badge) badge.textContent = `${totalCount} total`;
+    if (pageInfo) pageInfo.textContent = `Page ${userState.submissionPage} of ${totalPages}`;
+    if (btnPrev) btnPrev.disabled = userState.submissionPage <= 1;
+    if (btnNext) btnNext.disabled = userState.submissionPage >= totalPages;
+
+    const tp = computeTopPerformer(filtered);
+    if (topPerformerEl) {
+        topPerformerEl.innerHTML = tp.count > 0
+            ? `<span style="color:#34d399;font-weight:700;">🏆 Top Performer: ${tp.name}</span> <span style="color:rgba(255,255,255,0.7);margin-left:0.5rem;">(${tp.count} submission${tp.count !== 1 ? 's' : ''})</span>`
+            : `<span style="color:rgba(255,255,255,0.5);">🏆 Top Performer: —</span>`;
+    }
+
+    if (pageSubmissions.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state" style="text-align: center; padding: 3rem;">
+                <div style="font-size: 64px; margin-bottom: 1rem;">📭</div>
+                <h3 style="color: rgba(255,255,255,0.8); margin-bottom: 0.5rem;">No submissions found</h3>
+                <p style="color: rgba(255,255,255,0.6); margin-bottom: 1.5rem;">Try adjusting the staff or date filters.</p>
+            </div>
+        `;
+        return;
+    }
+
+    let html = `
+        <div class="recent-submissions-table-wrap">
+            <table class="recent-submissions-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>PSS Station</th>
+                        <th>Staff</th>
+                        <th>Feeders</th>
+                        <th>Total Load</th>
+                        <th>Time</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    pageSubmissions.forEach((sub) => {
+        const canEdit = isEditableSubmission(sub);
+        let totalMaxLoad = 0;
+        let feederCount = 0;
+        if (sub.feeders) {
+            Object.values(sub.feeders).forEach(feeder => {
+                totalMaxLoad += parseFloat(feeder.maxLoad) || 0;
+                feederCount++;
+            });
+        } else if (sub.totalMaxLoad) {
+            totalMaxLoad = sub.totalMaxLoad;
+        }
+        html += `
+            <tr>
+                <td data-label="Date">📅 ${formatDate(sub.date)}</td>
+                <td data-label="PSS Station">${sub.pssStation}</td>
+                <td data-label="Staff">👤 ${sub.staffName}</td>
+                <td data-label="Feeders"><span style="background: rgba(59,130,246,0.2); color: #60a5fa; padding: 0.25rem 0.75rem; border-radius: 12px; font-size: 12px; font-weight: 600;">${sub.feederCount || feederCount} Feeders</span></td>
+                <td data-label="Total Load">${totalMaxLoad.toFixed(2)} A</td>
+                <td data-label="Time">🕐 ${formatTime(sub.timestamp)}</td>
+                <td data-label="Actions" class="submission-actions-cell">
+                    <button onclick="viewSubmissionDetails('${sub.id}')" class="submission-table-action action-view">👁️ View</button>
+                    ${canEdit ? `<button onclick="editMySubmission('${sub.id}')" class="submission-table-action action-edit">✏️ Edit</button>` : ''}
+                </td>
+            </tr>
+        `;
+    });
+
+    html += `</tbody></table></div>`;
+    container.innerHTML = html;
+}
+
+window.renderRecentSubmissionsTab = renderRecentSubmissionsTab;
+
+function applyRecentSubmissionFilters() {
+    const staffFilter = document.getElementById('recentStaffFilter');
+    const fromDateFilter = document.getElementById('recentFromDate');
+    const toDateFilter = document.getElementById('recentToDate');
+    userState.submissionFilters.staff = staffFilter?.value || 'all';
+    userState.submissionFilters.fromDate = fromDateFilter?.value || '';
+    userState.submissionFilters.toDate = toDateFilter?.value || '';
+    userState.submissionPage = 1;
+    renderRecentSubmissionsTab();
+}
+
+function clearRecentSubmissionFilters() {
+    const staffFilter = document.getElementById('recentStaffFilter');
+    const fromDateFilter = document.getElementById('recentFromDate');
+    const toDateFilter = document.getElementById('recentToDate');
+    if (staffFilter) staffFilter.value = 'all';
+    if (fromDateFilter) fromDateFilter.value = '';
+    if (toDateFilter) toDateFilter.value = '';
+    userState.submissionFilters = { staff: 'all', fromDate: '', toDate: '' };
+    userState.submissionPage = 1;
+    renderRecentSubmissionsTab();
+}
+
+function prevRecentSubmissionPage() {
+    if (userState.submissionPage > 1) {
+        userState.submissionPage--;
+        renderRecentSubmissionsTab();
+    }
+}
+
+function nextRecentSubmissionPage() {
+    const filtered = getFilteredSubmissions();
+    const totalPages = Math.max(1, Math.ceil(filtered.length / (userState.submissionPageSize || 10)));
+    if (userState.submissionPage < totalPages) {
+        userState.submissionPage++;
+        renderRecentSubmissionsTab();
+    }
+}
+
+window.applyRecentSubmissionFilters = applyRecentSubmissionFilters;
+window.clearRecentSubmissionFilters = clearRecentSubmissionFilters;
+window.prevRecentSubmissionPage = prevRecentSubmissionPage;
+window.nextRecentSubmissionPage = nextRecentSubmissionPage;
 
 // ============================================
 // EVENT LISTENERS
@@ -3244,6 +3405,18 @@ function populateStaffFilter() {
     });
     
     staffSelect.innerHTML = optionsHtml;
+    
+    // Also populate recent submissions tab staff filter
+    const recentStaffSelect = document.getElementById('recentStaffFilter');
+    if (recentStaffSelect) {
+        const currentRecentSelection = recentStaffSelect.value;
+        let recentOptionsHtml = '<option value="all">All Staff</option>';
+        uniqueStaff.forEach(staff => {
+            const selected = staff === currentRecentSelection ? 'selected' : '';
+            recentOptionsHtml += `<option value="${staff}" ${selected}>👤 ${staff}</option>`;
+        });
+        recentStaffSelect.innerHTML = recentOptionsHtml;
+    }
     
     console.log('👥 Staff filter populated with', uniqueStaff.length, 'staff members');
 }
