@@ -626,6 +626,7 @@ async function deleteSubmission(submissionId) {
             console.log('✅ Refreshed View All window');
         } else if (adminState.currentWindow === 'analytics') {
             renderAllNewAnalytics(adminState.allSubmissions);
+            if (typeof renderTop5Rankings === 'function') renderTop5Rankings(adminState.allSubmissions);
             console.log('✅ Refreshed Analytics window');
         }
         
@@ -714,6 +715,7 @@ async function deleteAllSubmissions() {
             filterViewAllData();
         } else if (adminState.currentWindow === 'analytics') {
             renderAllNewAnalytics([]);
+            if (typeof renderTop5Rankings === 'function') renderTop5Rankings([]);
         }
         
         // Log activity
@@ -781,11 +783,93 @@ async function loadAnalyticsWindow() {
         renderPSSComparisonChart();
         renderSummaryStats();
     }
+
+    renderTop5Rankings(getCompleteAdminDataset());
 }
 
 function refreshAnalytics() {
     loadAnalyticsWindow();
 }
+
+// ============================================
+// TOP 5 RANKINGS (PERSON-WISE & GRID-WISE)
+// ============================================
+
+function renderTop5Rankings(data) {
+    const entries = Array.isArray(data) ? data : getCompleteAdminDataset();
+
+    const persons = new Map();
+    const stations = new Map();
+
+    (entries || []).forEach(entry => {
+        const personName = String(entry.staffName || entry.submittedBy || '').trim();
+        if (personName) {
+            const key = personName.toLowerCase();
+            const record = persons.get(key) || { name: personName, count: 0, stations: new Set(), latest: '' };
+            record.count += 1;
+            if (entry.pssStation) record.stations.add(String(entry.pssStation).trim());
+            const date = normalizeDateValue(entry.date);
+            if (date && date > record.latest) record.latest = date;
+            persons.set(key, record);
+        }
+
+        const stationName = String(entry.pssStation || '').trim();
+        if (stationName) {
+            const key = stationName.toLowerCase();
+            const record = stations.get(key) || { name: stationName, count: 0, staff: new Set(), latest: '' };
+            record.count += 1;
+            if (entry.staffName) record.staff.add(String(entry.staffName).trim());
+            const date = normalizeDateValue(entry.date);
+            if (date && date > record.latest) record.latest = date;
+            stations.set(key, record);
+        }
+    });
+
+    const topPersons = [...persons.values()]
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+        .slice(0, 5);
+    const topStations = [...stations.values()]
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+        .slice(0, 5);
+
+    renderTop5RankList('top5PersonsContainer', topPersons, 'person');
+    renderTop5RankList('top5StationsContainer', topStations, 'station');
+}
+
+function renderTop5RankList(containerId, rows, type) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    if (!rows.length) {
+        container.innerHTML = '<p class="top5-empty">No data available yet</p>';
+        return;
+    }
+
+    const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+    const maxCount = rows[0].count || 1;
+
+    container.innerHTML = rows.map((row, index) => {
+        const isPerson = type === 'person';
+        const subtitle = isPerson
+            ? `${row.stations.size} PSS ${row.stations.size === 1 ? 'station' : 'stations'} • latest ${row.latest ? formatDate(row.latest) : '—'}`
+            : `${row.staff.size} staff • latest ${row.latest ? formatDate(row.latest) : '—'}`;
+        const barWidth = Math.max(6, Math.round((row.count / maxCount) * 100));
+        return `
+            <div class="top5-rank-row ${isPerson ? 'is-person' : 'is-station'}">
+                <div class="top5-rank-medal">${medals[index] || '🏅'}</div>
+                <div class="top5-rank-body">
+                    <div class="top5-rank-title">
+                        <span>${escapeHtml(row.name)}</span>
+                        <span class="top5-rank-count">${row.count} entries</span>
+                    </div>
+                    <div class="top5-rank-sub">${escapeHtml(subtitle)}</div>
+                    <div class="top5-rank-bar"><div class="top5-rank-fill" style="width:${barWidth}%"></div></div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+window.renderTop5Rankings = renderTop5Rankings;
 
 // ============================================
 // I/C LOAD ANALYSIS (Peak vs Min)
@@ -2861,6 +2945,7 @@ function startRealTimeListeners() {
             if (typeof filterViewAllData === 'function') filterViewAllData();
         } else if (adminState.currentWindow === 'analytics') {
             if (typeof renderAllNewAnalytics === 'function') renderAllNewAnalytics(getCompleteAdminDataset());
+            if (typeof renderTop5Rankings === 'function') renderTop5Rankings(getCompleteAdminDataset());
         } else if (adminState.currentWindow === 'manage') {
             renderManageUsers();
             renderManagePSS();
@@ -4308,6 +4393,9 @@ async function loadAllSubmissionsForAI() {
     }
     if (adminState.currentWindow === 'analytics' && typeof renderAllNewAnalytics === 'function') {
         renderAllNewAnalytics(adminState.aiSubmissions);
+    }
+    if (adminState.currentWindow === 'analytics' && typeof renderTop5Rankings === 'function') {
+        renderTop5Rankings(adminState.aiSubmissions);
     }
 }
 

@@ -302,6 +302,17 @@ function todayLocalISO() {
     }
 }
 
+function addDaysISO(isoDate, days) {
+    const match = String(isoDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return '';
+    const utc = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + Number(days)));
+    return `${utc.getUTCFullYear()}-${String(utc.getUTCMonth() + 1).padStart(2, '0')}-${String(utc.getUTCDate()).padStart(2, '0')}`;
+}
+
+function yesterdayLocalISO() {
+    return addDaysISO(todayLocalISO(), -1);
+}
+
 function toLocalISODate(value) {
     if (!value) return '';
     if (value instanceof Date && !isNaN(value)) {

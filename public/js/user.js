@@ -6,9 +6,13 @@
 // Global user state
 const userState = {
     mySubmissions: [],
+    pssSubmissions: [],
     currentFilter: 'all',
     statistics: {},
     formModal: null,
+    calendarMonth: todayLocalISO().slice(0, 7),
+    calendarScope: 'mine',
+    calendarSelectedDate: '',
     // New filter state
     submissionFilters: {
         staff: 'all',
@@ -580,6 +584,261 @@ function renderStreakCalendar() {
 }
 
 // ============================================
+// USER SUBMISSION CALENDAR
+// ============================================
+
+function isMyCalendarEntry(entry) {
+    if (!entry) return false;
+    const myPhone = normalizePhone(appState.currentUser?.phoneNumber);
+    const entryPhone = normalizePhone(entry.phoneNumber || entry.phone);
+    if (myPhone && entryPhone && myPhone === entryPhone) return true;
+    const myName = String(appState.currentUser?.name || '').trim().toLowerCase();
+    return !!myName && String(entry.staffName || '').trim().toLowerCase() === myName;
+}
+
+function getCalendarScopeEntries() {
+    const source = userState.calendarScope === 'station'
+        ? userState.pssSubmissions
+        : userState.mySubmissions;
+    return (source || []).filter(entry => !!normalizeDateValue(entry.date));
+}
+
+function getCalendarEntriesByDate() {
+    const map = new Map();
+    getCalendarScopeEntries().forEach(entry => {
+        const iso = normalizeDateValue(entry.date);
+        if (!iso) return;
+        if (!map.has(iso)) map.set(iso, []);
+        map.get(iso).push(entry);
+    });
+    return map;
+}
+
+function getUserCalendarMonthLabel(monthKey) {
+    const [year, month] = String(monthKey || '').split('-').map(Number);
+    if (!year || !month) return '—';
+    return new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+function switchUserTab(tabName) {
+    if (!tabName) return;
+    document.querySelectorAll('.user-tab').forEach(tab => {
+        const active = tab.dataset.userTab === tabName;
+        tab.classList.toggle('active', active);
+        tab.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    document.querySelectorAll('.user-tab-panel').forEach(panel => {
+        const panelName = panel.id.replace(/^user/, '').replace(/Panel$/, '').toLowerCase();
+        panel.classList.toggle('active', panelName === tabName);
+    });
+    if (tabName === 'calendar') {
+        loadUserCalendarData().then(() => renderUserCalendar());
+    }
+}
+window.switchUserTab = switchUserTab;
+
+async function loadUserCalendarData(force = false) {
+    if (!force && userState.pssSubmissions.length > 0) return;
+    await updatePSSStats();
+}
+
+function refreshUserCalendar() {
+    loadUserCalendarData(true).then(() => {
+        renderUserCalendar();
+        showUserNotification('Calendar refreshed', 'success');
+    });
+}
+window.refreshUserCalendar = refreshUserCalendar;
+
+function shiftUserCalendarMonth(delta) {
+    const [year, month] = String(userState.calendarMonth || todayLocalISO().slice(0, 7)).split('-').map(Number);
+    const next = new Date(year, month - 1 + Number(delta || 0), 1);
+    userState.calendarMonth = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`;
+    userState.calendarSelectedDate = '';
+    renderUserCalendar();
+}
+window.shiftUserCalendarMonth = shiftUserCalendarMonth;
+
+function goToUserCalendarToday() {
+    userState.calendarMonth = todayLocalISO().slice(0, 7);
+    userState.calendarSelectedDate = '';
+    renderUserCalendar();
+}
+window.goToUserCalendarToday = goToUserCalendarToday;
+
+function setUserCalendarScope(scope) {
+    userState.calendarScope = scope === 'station' ? 'station' : 'mine';
+    userState.calendarSelectedDate = '';
+    document.querySelectorAll('.calendar-scope-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.calendarScope === userState.calendarScope);
+    });
+    renderUserCalendar();
+}
+window.setUserCalendarScope = setUserCalendarScope;
+
+function renderUserCalendar() {
+    const grid = document.getElementById('userCalendarGrid');
+    if (!grid) return;
+
+    const monthKey = userState.calendarMonth || todayLocalISO().slice(0, 7);
+    userState.calendarMonth = monthKey;
+    const [year, month] = monthKey.split('-').map(Number);
+    const label = document.getElementById('userCalendarMonth');
+    if (label) label.textContent = getUserCalendarMonthLabel(monthKey);
+
+    const byDate = getCalendarEntriesByDate();
+    const today = todayLocalISO();
+    const firstWeekday = new Date(year, month - 1, 1).getDay();
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    const cells = [];
+    for (let i = 0; i < firstWeekday; i++) {
+        cells.push('<div class="user-calendar-cell is-empty" aria-hidden="true"></div>');
+    }
+    for (let day = 1; day <= daysInMonth; day++) {
+        const iso = `${monthKey}-${String(day).padStart(2, '0')}`;
+        const dayEntries = byDate.get(iso) || [];
+        const hasMine = dayEntries.some(isMyCalendarEntry);
+        const classes = ['user-calendar-cell'];
+        if (dayEntries.length) classes.push('has-data');
+        if (hasMine) classes.push('is-mine');
+        if (iso === today) classes.push('is-today');
+        if (iso > today) classes.push('is-future');
+        if (iso === userState.calendarSelectedDate) classes.push('is-selected');
+        const badge = dayEntries.length
+            ? `<span class="user-calendar-badge">${dayEntries.length}</span>`
+            : '';
+        const dot = hasMine ? '<span class="user-calendar-dot" aria-hidden="true"></span>' : '';
+        cells.push(`
+            <button type="button" class="${classes.join(' ')}" data-date="${iso}" ${dayEntries.length ? '' : 'disabled'} aria-label="${formatDate(iso)}${dayEntries.length ? `, ${dayEntries.length} entries` : ', no entries'}">
+                <span class="user-calendar-daynum">${day}</span>
+                ${badge}
+                ${dot}
+            </button>
+        `);
+    }
+    grid.innerHTML = cells.join('');
+
+    renderUserCalendarSummary(byDate, monthKey);
+    renderUserCalendarDetails(userState.calendarSelectedDate);
+}
+window.renderUserCalendar = renderUserCalendar;
+
+function renderUserCalendarSummary(byDate, monthKey) {
+    const container = document.getElementById('userCalendarSummary');
+    if (!container) return;
+
+    let daysWithData = 0;
+    let totalEntries = 0;
+    let latestDate = '';
+    const staff = new Set();
+    byDate.forEach((entries, iso) => {
+        if (!iso.startsWith(monthKey)) return;
+        daysWithData += 1;
+        totalEntries += entries.length;
+        entries.forEach(entry => {
+            if (entry.staffName) staff.add(String(entry.staffName).trim());
+        });
+        if (!latestDate || iso > latestDate) latestDate = iso;
+    });
+
+    const subtitle = document.getElementById('userCalendarSubtitle');
+    if (subtitle) {
+        subtitle.textContent = userState.calendarScope === 'station'
+            ? `All loading entries submitted for ${appState.currentUser?.pssStation || 'your PSS station'}`
+            : 'Month-wise record of loading data submitted by you';
+    }
+
+    container.innerHTML = `
+        <span class="user-calendar-summary-chip">📅 Days with data <strong>${daysWithData}</strong></span>
+        <span class="user-calendar-summary-chip">📊 Entries <strong>${totalEntries}</strong></span>
+        <span class="user-calendar-summary-chip">👥 Staff <strong>${staff.size}</strong></span>
+        <span class="user-calendar-summary-chip">🕐 Latest <strong>${latestDate ? formatDate(latestDate) : '—'}</strong></span>
+    `;
+
+    if (!userState.calendarSelectedDate && latestDate) {
+        userState.calendarSelectedDate = latestDate;
+    }
+}
+
+function renderUserCalendarDetails(dateISO) {
+    const container = document.getElementById('userCalendarDetails');
+    if (!container) return;
+
+    if (!dateISO) {
+        container.innerHTML = `
+            <div class="user-calendar-empty">
+                <span class="big">📅</span>
+                Select a highlighted date to see who submitted and when.
+            </div>
+        `;
+        return;
+    }
+
+    const entries = getCalendarScopeEntries()
+        .filter(entry => normalizeDateValue(entry.date) === dateISO)
+        .sort((a, b) => entrySortValue(b) - entrySortValue(a));
+
+    if (!entries.length) {
+        container.innerHTML = `
+            <div class="user-calendar-empty">
+                <span class="big">📭</span>
+                No entries for ${formatDate(dateISO)}.
+            </div>
+        `;
+        return;
+    }
+
+    const rows = entries.map(entry => {
+        const feederCount = entry.feederCount || (entry.feeders ? Object.keys(entry.feeders).length : 0);
+        const totalLoad = Number(entry.totalMaxLoad) || 0;
+        const submittedBy = entry.submittedBy || entry.staffName || 'Unknown';
+        const submittedAt = entry.timestamp
+            ? formatTimestamp(entry.timestamp)
+            : (entry.updatedAt ? formatTimestamp(entry.updatedAt) : 'Not recorded');
+        const mineBadge = isMyCalendarEntry(entry)
+            ? '<span style="background: rgba(139,92,246,0.22); color:#c4b5fd; padding:0.15rem 0.5rem; border-radius:999px; font-size:10px; font-weight:700;">YOU</span>'
+            : '';
+        return `
+            <div class="user-calendar-entry">
+                <div class="user-calendar-entry-main">
+                    <strong>👤 ${escapeHtml(entry.staffName || 'Unknown staff')} ${mineBadge}</strong>
+                    <div class="user-calendar-entry-meta">
+                        <span>📝 Submitted by: ${escapeHtml(submittedBy)}</span>
+                        <span>🕐 ${escapeHtml(submittedAt)}</span>
+                        <span>⚡ ${feederCount} feeders</span>
+                        <span>🔌 ${totalLoad.toFixed(2)} A</span>
+                    </div>
+                </div>
+                <div class="user-calendar-entry-actions">
+                    <button type="button" class="user-calendar-entry-btn" onclick="viewCalendarEntry('${entry.id}')">👁️ View</button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = `
+        <div class="user-calendar-day-head">
+            <h4>📅 ${formatDate(dateISO)}</h4>
+            <span>${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}</span>
+        </div>
+        <div>${rows}</div>
+    `;
+}
+window.renderUserCalendarDetails = renderUserCalendarDetails;
+
+function viewCalendarEntry(entryId) {
+    const entry = userState.mySubmissions.find(item => item.id === entryId)
+        || userState.pssSubmissions.find(item => item.id === entryId);
+    if (!entry) {
+        showUserNotification('Entry details are no longer available. Refresh the calendar.', 'error');
+        return;
+    }
+    showSubmissionDetails(entry);
+}
+window.viewCalendarEntry = viewCalendarEntry;
+
+// ============================================
 // EVENT LISTENERS
 // ============================================
 
@@ -588,6 +847,36 @@ function setupUserEventListeners() {
     document.querySelectorAll('.btn-new-entry').forEach(btn => {
         btn.addEventListener('click', openNewEntryForm);
     });
+
+    // User dashboard tabs (Dashboard / Calendar)
+    document.querySelectorAll('.user-tab').forEach(tab => {
+        tab.addEventListener('click', () => switchUserTab(tab.dataset.userTab));
+    });
+
+    // Calendar scope toggles
+    document.querySelectorAll('.calendar-scope-btn').forEach(btn => {
+        btn.addEventListener('click', () => setUserCalendarScope(btn.dataset.calendarScope));
+    });
+
+    // Calendar day selection
+    const calendarGrid = document.getElementById('userCalendarGrid');
+    if (calendarGrid && !calendarGrid.dataset.bound) {
+        calendarGrid.dataset.bound = '1';
+        calendarGrid.addEventListener('click', (event) => {
+            const cell = event.target.closest('[data-date]');
+            if (!cell) return;
+            userState.calendarSelectedDate = cell.dataset.date;
+            renderUserCalendar();
+            renderUserCalendarDetails(cell.dataset.date);
+        });
+    }
+
+    // Date selection guard (no today/future, override existing record)
+    const formDateInput = document.getElementById('formDate');
+    if (formDateInput && !formDateInput.dataset.boundDateGuard) {
+        formDateInput.dataset.boundDateGuard = '1';
+        formDateInput.addEventListener('change', handleUserDateSelection);
+    }
     
     // Filter tabs
     document.querySelectorAll('.filter-tab').forEach(tab => {
@@ -617,7 +906,13 @@ async function viewSubmissionDetails(submissionId) {
         alert('Submission not found!');
         return;
     }
-    
+    showSubmissionDetails(submission);
+}
+
+function showSubmissionDetails(submission) {
+    if (!submission) return;
+    const submissionId = submission.id;
+
     console.log('📊 Viewing submission details:', submissionId);
     console.log('  Full submission data:', submission);
     console.log('  Feeders data:', submission.feeders);
@@ -960,6 +1255,19 @@ function startUserRealTimeListeners() {
                         console.log('✅ Submission removed:', docData.id);
                     }
                 }
+
+                // Keep the PSS-wide calendar cache fresh
+                const myStation = String(appState.currentUser?.pssStation || '').trim().toLowerCase();
+                if (myStation && String(docData.pssStation || '').trim().toLowerCase() === myStation) {
+                    const pssIndex = userState.pssSubmissions.findIndex(item => item.id === docData.id);
+                    if (change.type === 'removed') {
+                        if (pssIndex !== -1) userState.pssSubmissions.splice(pssIndex, 1);
+                    } else if (pssIndex !== -1) {
+                        userState.pssSubmissions[pssIndex] = docData;
+                    } else {
+                        userState.pssSubmissions.push(docData);
+                    }
+                }
             });
             
             // Only refresh if there were actual changes
@@ -968,6 +1276,7 @@ function startUserRealTimeListeners() {
                 calculateUserStatistics();
                 renderDashboard();
                 renderSubmissionHistory();
+                if (typeof renderUserCalendar === 'function') renderUserCalendar();
             }
         }, error => {
             console.error('Real-time listener error:', error);
@@ -1203,6 +1512,68 @@ window.selectMinute = selectMinute;
 // NEW ENTRY FORM FUNCTIONS
 // ============================================
 
+async function findExistingEntryForDate(isoDate, pssStation, excludeId = null) {
+    try {
+        const snapshot = await db.collection('daily_entries')
+            .where('date', '==', isoDate)
+            .get();
+        const station = String(pssStation || '').trim().toLowerCase();
+        if (!station) return null;
+        const matches = snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(entry =>
+                String(entry.pssStation || '').trim().toLowerCase() === station &&
+                entry.id !== excludeId
+            );
+        if (!matches.length) return null;
+        const staffName = String(document.getElementById('selectedStaffMember')?.value || '').trim().toLowerCase();
+        return matches.find(entry =>
+            String(entry.staffName || '').trim().toLowerCase() === staffName
+        ) || matches[0];
+    } catch (error) {
+        console.warn('Duplicate lookup skipped:', error.message);
+        return null;
+    }
+}
+
+async function handleUserDateSelection() {
+    const input = document.getElementById('formDate');
+    if (!input) return;
+    const isoDate = normalizeDateValue(input.value);
+    if (!isoDate) return;
+
+    const today = todayLocalISO();
+    if (!editingSubmissionId && isoDate >= today) {
+        showUserNotification(`Data can only be submitted for previous dates. Latest allowed: ${formatDate(yesterdayLocalISO())}`, 'error');
+        input.value = yesterdayLocalISO();
+        return;
+    }
+
+    const pssStation = document.getElementById('formPSSStation')?.value || getActivePSSStation();
+    const existing = await findExistingEntryForDate(isoDate, pssStation, editingSubmissionId);
+    if (!existing) return;
+
+    const submittedBy = existing.submittedBy || existing.staffName || 'Unknown';
+    const submittedAt = existing.timestamp ? formatTimestamp(existing.timestamp) : 'Not recorded';
+    const override = confirm(
+        `⚠️ A record already exists for ${formatDate(isoDate)} at ${pssStation}.\n\n` +
+        `👤 Staff: ${existing.staffName || 'Unknown'}\n` +
+        `📝 Submitted by: ${submittedBy}\n` +
+        `🕐 Submitted at: ${submittedAt}\n\n` +
+        'Do you want to OVERRIDE the existing data?\n\n' +
+        'OK = Load the existing record to edit/override\n' +
+        'Cancel = Choose another date'
+    );
+
+    if (override) {
+        closeNewEntryForm();
+        openNewEntryForm(existing);
+    } else {
+        input.value = '';
+        showUserNotification('Choose a different date or override the existing record.', 'info');
+    }
+}
+
 function openNewEntryForm(submission = null) {
     editingSubmissionId = submission?.id || null;
     pendingEditData = submission || null;
@@ -1218,7 +1589,11 @@ function openNewEntryForm(submission = null) {
     // Use the record's station when an admin edits another PSS.
     const pssStation = submission?.pssStation || getActivePSSStation() || Object.keys(appState.pssConfig || {})[0] || 'KUNDUKELA';
     formPSSStation.value = pssStation;
-    formDate.value = submission?.date ? normalizeDateValue(submission.date) : todayLocalISO();
+    const existingDate = submission?.date ? normalizeDateValue(submission.date) : '';
+    const latestAllowedDate = yesterdayLocalISO();
+    formDate.min = '';
+    formDate.max = existingDate && existingDate > latestAllowedDate ? existingDate : latestAllowedDate;
+    formDate.value = existingDate || latestAllowedDate;
     const submitBtn = document.getElementById('submitBtn');
     if (submitBtn) submitBtn.textContent = submission ? 'Update Data' : 'Submit Data';
     console.log('PSS Station:', pssStation);
@@ -1280,7 +1655,7 @@ function openNewEntryForm(submission = null) {
     populateStaffCards(pssStation, linemenCards, helpersCards);
     applyPendingStaffSelection();
     
-    if (!formDate.value) formDate.value = todayLocalISO();
+    if (!formDate.value) formDate.value = yesterdayLocalISO();
 }
 
 function populateStaffCards(pssStation, linemenCards, helpersCards) {
@@ -1548,7 +1923,20 @@ function validateCurrentStep() {
             document.getElementById('formDate').focus();
             return false;
         }
-        
+
+        const isoDate = normalizeDateValue(date);
+        const today = todayLocalISO();
+        if (!isoDate) {
+            alert('❌ Please select a valid date');
+            document.getElementById('formDate').focus();
+            return false;
+        }
+        if (!editingSubmissionId && isoDate >= today) {
+            alert(`❌ Data can only be submitted for previous dates.\n\nToday: ${formatDate(today)}\nLatest allowed: ${formatDate(yesterdayLocalISO())}`);
+            document.getElementById('formDate').focus();
+            return false;
+        }
+
         if (!staffName) {
             alert('❌ Please select a staff member');
             return false;
@@ -2047,22 +2435,34 @@ async function submitLoadingData() {
         }
 
         const isoDate = normalizeDateValue(date);
+        if (!isoDate) {
+            alert('❌ Please select a valid date');
+            document.getElementById('formDate').focus();
+            return;
+        }
+        if (!editingSubmissionId && isoDate >= todayLocalISO()) {
+            alert(`❌ Data can only be submitted for previous dates.\n\nLatest allowed: ${formatDate(yesterdayLocalISO())}`);
+            document.getElementById('formDate').focus();
+            return;
+        }
         if (!editingSubmissionId) {
             try {
                 const sameDaySnap = await db.collection('daily_entries')
                     .where('date', '==', isoDate)
                     .get();
                 const sameStation = String(pssStation || '').trim().toLowerCase();
-                const duplicate = sameDaySnap.docs
+                const dayEntries = sameDaySnap.docs
                     .map(doc => ({ id: doc.id, ...doc.data() }))
-                    .find(entry =>
-                        String(entry.pssStation || '').trim().toLowerCase() === sameStation &&
-                        (entry.staffName || '').toLowerCase() === staffName.toLowerCase()
-                    );
-                if (duplicate) {
+                    .filter(entry => String(entry.pssStation || '').trim().toLowerCase() === sameStation);
+                if (dayEntries.length) {
+                    const duplicate = dayEntries.find(entry =>
+                        String(entry.staffName || '').toLowerCase() === staffName.toLowerCase()
+                    ) || dayEntries[0];
+                    const who = duplicate.submittedBy || duplicate.staffName || 'another user';
                     const updateExisting = confirm(
-                        `${staffName} already submitted data for ${pssStation} on ${formatDate(isoDate)}.\n\n` +
-                        'OK = update that existing entry\nCancel = do not save a duplicate'
+                        `A record already exists for ${pssStation} on ${formatDate(isoDate)}.\n` +
+                        `Staff: ${duplicate.staffName || 'Unknown'} | Submitted by: ${who}\n\n` +
+                        'OK = override the existing entry\nCancel = do not save a duplicate'
                     );
                     if (!updateExisting) return;
                     editingSubmissionId = duplicate.id;
@@ -2352,6 +2752,7 @@ async function updatePSSStats() {
             snapshot.forEach(doc => submissionMap.set(doc.id, { id: doc.id, ...doc.data() }));
         });
         let submissions = sortEntriesDesc(decorateEntries([...submissionMap.values()]));
+        userState.pssSubmissions = submissions;
         
         console.log(`✅ Found ${submissions.length} submissions for PSS stats`);
         
@@ -2423,7 +2824,10 @@ async function updatePSSStats() {
         
         // Update leaderboard
         displayLeaderboard(staffCounts);
-        
+
+        // Keep the submission calendar in sync
+        if (typeof renderUserCalendar === 'function') renderUserCalendar();
+
         console.log('✅ PSS stats updated successfully');
         
     } catch (error) {

@@ -10,8 +10,8 @@
     <title>Loading Data Management App - Raja Patel</title>
     <link rel="stylesheet" href="css/loading.css?v=101">
     <link rel="stylesheet" href="css/login.css?v=101">
-    <link rel="stylesheet" href="css/admin.css?v=101">
-    <link rel="stylesheet" href="css/user.css?v=101">
+    <link rel="stylesheet" href="css/admin.css?v=103">
+    <link rel="stylesheet" href="css/user.css?v=103">
     <link rel="stylesheet" href="css/form.css?v=101">
     <link rel="stylesheet" href="css/custom-select.css?v=101">
     <link rel="stylesheet" href="css/dashboard-analytics.css?v=101">
@@ -1468,6 +1468,28 @@
                     </div>
                 </div>
 
+                <!-- Top 5 Rankings Section -->
+                <div style="margin-bottom: 3rem;">
+                    <h3 style="color: #fbbf24; margin-bottom: 1.5rem; font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="background: rgba(245,158,11,0.2); padding: 8px 12px; border-radius: 8px;">🏆</span>
+                        Top 5 Rankings
+                    </h3>
+                    <div class="top5-ranking-grid">
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(59,130,246,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #93c5fd; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">👤 Top 5 Persons (by Submissions)</h4>
+                            <div id="top5PersonsContainer" class="top5-ranking-list">
+                                <p class="top5-empty">No data available yet</p>
+                            </div>
+                        </div>
+                        <div class="analytics-card" style="background: rgba(30,41,59,0.8); border: 1px solid rgba(16,185,129,0.3); border-radius: 16px; padding: 1.5rem; box-shadow: 0 8px 32px rgba(0,0,0,0.3);">
+                            <h4 style="color: #6ee7b7; margin-bottom: 1rem; font-size: 14px; font-weight: 600;">🏭 Top 5 PSS Grids (by Submissions)</h4>
+                            <div id="top5StationsContainer" class="top5-ranking-list">
+                                <p class="top5-empty">No data available yet</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Section A: PSS-Level Overview -->
                 <div style="margin-bottom: 3rem;">
                     <h3 style="color: #60a5fa; margin-bottom: 1.5rem; font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
@@ -1917,7 +1939,7 @@
                 <div class="user-avatar">K</div>
                 <div class="user-welcome">
                     <h1>Welcome, User!</h1>
-                    <p>Ready to submit today's data?</p>
+                    <p>Ready to submit yesterday's data?</p>
                 </div>
             </div>
             <div class="user-header-right">
@@ -1932,6 +1954,13 @@
 
         <!-- User Main Content -->
         <div class="user-main-content">
+            <!-- User Tabs -->
+            <div class="user-tabs" role="tablist" aria-label="User dashboard sections">
+                <button type="button" class="user-tab active" data-user-tab="dashboard" role="tab" aria-selected="true">📊 Dashboard</button>
+                <button type="button" class="user-tab" data-user-tab="calendar" role="tab" aria-selected="false">📅 Calendar</button>
+            </div>
+
+            <div id="userDashboardPanel" class="user-tab-panel active" role="tabpanel">
             <!-- Stats Cards -->
             <div class="stats-grid">
                 <div class="stat-card" data-stat-id="total-submissions">
@@ -2054,6 +2083,44 @@
                 
                 <div id="recentSubmissionsContainer" class="submissions-list">
                     <p style="text-align: center; color: rgba(255,255,255,0.6); padding: 2rem;">No submissions yet. Click "+ New Entry" to submit your first data.</p>
+                </div>
+            </div>
+            </div>
+            <!-- /Dashboard panel -->
+
+            <!-- Calendar panel -->
+            <div id="userCalendarPanel" class="user-tab-panel" role="tabpanel">
+                <div class="dashboard-section user-calendar-section">
+                    <div class="user-calendar-head">
+                        <div>
+                            <h2>📅 Submission Calendar</h2>
+                            <p class="user-calendar-subtitle" id="userCalendarSubtitle">Month-wise record of submitted loading data</p>
+                        </div>
+                        <div class="user-calendar-actions">
+                            <div class="user-calendar-scope" role="group" aria-label="Calendar scope">
+                                <button type="button" class="calendar-scope-btn active" data-calendar-scope="mine">👤 My Entries</button>
+                                <button type="button" class="calendar-scope-btn" data-calendar-scope="station">🏭 My PSS</button>
+                            </div>
+                            <button type="button" class="btn-secondary user-calendar-refresh" onclick="refreshUserCalendar()">🔄 Refresh</button>
+                        </div>
+                    </div>
+
+                    <div class="calendar-header user-calendar-header">
+                        <h3 class="calendar-month" id="userCalendarMonth">—</h3>
+                        <div class="calendar-nav">
+                            <button type="button" class="btn-calendar-nav" onclick="shiftUserCalendarMonth(-1)" aria-label="Previous month">‹</button>
+                            <button type="button" class="btn-calendar-nav user-calendar-today" onclick="goToUserCalendarToday()">Today</button>
+                            <button type="button" class="btn-calendar-nav" onclick="shiftUserCalendarMonth(1)" aria-label="Next month">›</button>
+                        </div>
+                    </div>
+
+                    <div class="user-calendar-weekdays" aria-hidden="true">
+                        <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+                    </div>
+                    <div id="userCalendarGrid" class="user-calendar-grid" role="grid" aria-label="Submission calendar"></div>
+
+                    <div id="userCalendarSummary" class="user-calendar-summary"></div>
+                    <div id="userCalendarDetails" class="user-calendar-details" aria-live="polite"></div>
                 </div>
             </div>
         </div>
@@ -2190,17 +2257,17 @@
 
     <!-- App Scripts (Order matters - dependencies first) -->
     <script src="js/firebase-config.js?v=101"></script>
-    <script src="js/app.js?v=101"></script>
+    <script src="js/app.js?v=103"></script>
     <script src="js/analytics.js?v=101"></script>
     <script src="js/excel-handler.js?v=101"></script>
     <script src="js/auth.js?v=101"></script>
     <script src="js/new-dashboard-analytics.js?v=101"></script>
     <script src="js/new-analytics.js?v=101"></script>
     <script src="js/chatbot.js?v=101"></script>
-    <script src="js/admin.js?v=102"></script>
+    <script src="js/admin.js?v=103"></script>
     <script src="js/attendance.js?v=102"></script>
     <script src="js/custom-select.js?v=101"></script>
-    <script src="js/user.js?v=101"></script>
+    <script src="js/user.js?v=103"></script>
     <!-- form-handler.js removed - using wizard in user.js -->
 
 </body>
