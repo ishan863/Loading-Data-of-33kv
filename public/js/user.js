@@ -432,10 +432,18 @@ function getFilteredSubmissions() {
         filtered = filtered.filter(sub => sub.staffName === userState.submissionFilters.staff);
     }
     if (userState.submissionFilters.fromDate) {
-        filtered = filtered.filter(sub => sub.date >= userState.submissionFilters.fromDate);
+        const from = userState.submissionFilters.fromDate;
+        filtered = filtered.filter(sub => {
+            const d = normalizeDateValue(sub.date);
+            return d && d >= from;
+        });
     }
     if (userState.submissionFilters.toDate) {
-        filtered = filtered.filter(sub => sub.date <= userState.submissionFilters.toDate);
+        const to = userState.submissionFilters.toDate;
+        filtered = filtered.filter(sub => {
+            const d = normalizeDateValue(sub.date);
+            return d && d <= to;
+        });
     }
     // Newest first
     filtered.sort((a, b) => entrySortValue(b) - entrySortValue(a));
@@ -890,8 +898,10 @@ window.viewCalendarEntry = viewCalendarEntry;
 function computeTopPerformer(filtered) {
     const counts = {};
     filtered.forEach(sub => {
-        const name = sub.staffName || 'Unknown';
-        counts[name] = (counts[name] || 0) + 1;
+        const fullName = sub.staffName || 'Unknown';
+        // Extract operator name from combined format "OPERATOR (Op) / HELPER (Helper)"
+        const operatorName = fullName.split(' (Op)')[0]?.trim() || fullName;
+        counts[operatorName] = (counts[operatorName] || 0) + 1;
     });
     let topName = '—', topCount = 0;
     Object.entries(counts).forEach(([name, c]) => {
@@ -1476,6 +1486,7 @@ function startUserRealTimeListeners() {
                 renderDashboard();
                 renderSubmissionHistory();
                 if (typeof renderUserCalendar === 'function') renderUserCalendar();
+                if (typeof renderRecentSubmissionsTab === 'function') renderRecentSubmissionsTab();
             }
         }, error => {
             console.error('Real-time listener error:', error);
@@ -1792,8 +1803,8 @@ function openNewEntryForm(submission = null) {
     const modal = document.getElementById('newEntryModal');
     const formPSSStation = document.getElementById('formPSSStation');
     const formDate = document.getElementById('formDate');
-    const formOperator = document.getElementById('formOperator');
-    const formHelper = document.getElementById('formHelper');
+    const linemenCards = document.getElementById('linemenCards');
+    const helpersCards = document.getElementById('helpersCards');
     
     // Use the record's station when an admin edits another PSS.
     const pssStation = submission?.pssStation || getActivePSSStation() || Object.keys(appState.pssConfig || {})[0] || 'KUNDUKELA';
@@ -1808,20 +1819,13 @@ function openNewEntryForm(submission = null) {
     // Clear previous selections
     document.getElementById('selectedStaffMember').value = '';
     document.getElementById('selectedHelper').value = '';
-    if (formOperator) formOperator.value = '';
-    if (formHelper) formHelper.value = '';
     
-    // Populate operator/helper dropdowns
-    populateStaffDropdowns(pssStation, formOperator, formHelper);
+    // Populate staff cards
+    populateStaffCards(pssStation, linemenCards, helpersCards);
     
     // Apply pending staff selection if editing
     if (submission) {
-        if (formOperator) formOperator.value = submission.staffName || '';
-        document.getElementById('selectedStaffMember').value = submission.staffName || '';
-        if (submission.helper) {
-            if (formHelper) formHelper.value = submission.helper;
-            document.getElementById('selectedHelper').value = submission.helper;
-        }
+        applyPendingStaffSelection();
     }
     
     // Reset wizard to step 0
@@ -1862,14 +1866,9 @@ function openNewEntryForm(submission = null) {
                 if (name && !appState.pssConfig[name]) appState.pssConfig[name] = data;
             });
             console.log('✅ PSS Config reloaded:', appState.pssConfig);
-            populateStaffDropdowns(pssStation, formOperator, formHelper);
+            populateStaffCards(pssStation, linemenCards, helpersCards);
             if (submission) {
-                if (formOperator) formOperator.value = submission.staffName || '';
-                document.getElementById('selectedStaffMember').value = submission.staffName || '';
-                if (submission.helper) {
-                    if (formHelper) formHelper.value = submission.helper;
-                    document.getElementById('selectedHelper').value = submission.helper;
-                }
+                applyPendingStaffSelection();
             }
         }).catch(error => {
             console.error('❌ Error reloading PSS config:', error);
@@ -1878,56 +1877,6 @@ function openNewEntryForm(submission = null) {
     }
     
     if (!formDate.value) formDate.value = yesterdayLocalISO();
-}
-
-function populateStaffDropdowns(pssStation, operatorSelect, helperSelect) {
-    // Get PSS data - check multiple possible locations
-    let pssData = appState.pssConfig[pssStation];
-    
-    // If not found, try finding by case-insensitive match
-    if (!pssData) {
-        const pssKey = Object.keys(appState.pssConfig).find(key => 
-            key.toLowerCase() === pssStation.toLowerCase()
-        );
-        if (pssKey) {
-            pssData = appState.pssConfig[pssKey];
-            console.log('Found PSS data with key:', pssKey);
-        }
-    }
-    
-    console.log('PSS Data for', pssStation, ':', pssData);
-    
-    // Build options helper
-    const buildOptions = (list, selectedValue = '') => {
-        let html = '<option value="">Select</option>';
-        (list || []).forEach(name => {
-            if (!name || !name.trim()) return;
-            const sel = String(name).trim() === selectedValue ? 'selected' : '';
-            html += `<option value="${escapeHtml(String(name).trim())}" ${sel}>${escapeHtml(String(name).trim())}</option>`;
-        });
-        return html;
-    };
-    
-    if (operatorSelect && pssData) {
-        const rawLinemen = pssData.lineman || pssData.linemen || [];
-        const linemenList = (Array.isArray(rawLinemen) ? rawLinemen : String(rawLinemen).split(/[\n,]+/)).map(n => String(n).trim()).filter(Boolean);
-        operatorSelect.innerHTML = buildOptions(linemenList, operatorSelect.value || '');
-        console.log('Linemen dropdown populated:', linemenList.length, 'items');
-    }
-    
-    if (helperSelect && pssData) {
-        const rawHelpers = pssData.helper || pssData.helpers || [];
-        const helpersList = (Array.isArray(rawHelpers) ? rawHelpers : String(rawHelpers).split(/[\n,]+/)).map(n => String(n).trim()).filter(Boolean);
-        helperSelect.innerHTML = '<option value="">Select helper (optional)</option>' + buildOptions(helpersList, helperSelect.value || '').replace(/^<option value="">Select<\/option>/, '');
-        console.log('Helpers dropdown populated:', helpersList.length, 'items');
-    }
-    
-    if (!operatorSelect || !pssData) {
-        if (operatorSelect) operatorSelect.innerHTML = '<option value="">No operators available</option>';
-    }
-    if (!helperSelect || !pssData) {
-        if (helperSelect) helperSelect.innerHTML = '<option value="">No helpers available</option>';
-    }
 }
 
 function populateStaffCards(pssStation, linemenCards, helpersCards) {
@@ -2016,19 +1965,40 @@ function populateStaffCards(pssStation, linemenCards, helpersCards) {
 function applyPendingStaffSelection() {
     if (!pendingEditData || !pendingEditData.staffName) return;
     const name = pendingEditData.staffName;
-    const operatorSelect = document.getElementById('formOperator');
-    if (operatorSelect) operatorSelect.value = name;
+    const cards = Array.from(document.querySelectorAll('#linemenCards .staff-card, #helpersCards .staff-card'));
+    const match = cards.find(card => (card.querySelector('.staff-card-name')?.textContent || '').trim() === name);
+    if (match) {
+        selectStaffMember(name, match);
+        return;
+    }
+    const container = document.getElementById('helpersCards') || document.getElementById('linemenCards');
+    if (!container) return;
+    const placeholder = container.querySelector('p');
+    if (placeholder) placeholder.remove();
+    const card = document.createElement('div');
+    card.className = 'staff-card selected';
+    const nameEl = document.createElement('span');
+    nameEl.className = 'staff-card-name';
+    nameEl.textContent = name;
+    card.appendChild(nameEl);
+    card.onclick = () => selectStaffMember(name, card);
+    container.appendChild(card);
     document.getElementById('selectedStaffMember').value = name;
     if (pendingEditData.helper) {
-        const helperSelect = document.getElementById('formHelper');
-        if (helperSelect) helperSelect.value = pendingEditData.helper;
         document.getElementById('selectedHelper').value = pendingEditData.helper;
     }
 }
 
 function selectStaffMember(name, clickedCard) {
-    const operatorSelect = document.getElementById('formOperator');
-    if (operatorSelect) operatorSelect.value = name;
+    // Remove selected class from all cards
+    document.querySelectorAll('.staff-card').forEach(card => {
+        card.classList.remove('selected');
+    });
+    
+    // Add selected class to clicked card
+    clickedCard.classList.add('selected');
+    
+    // Store selected staff member
     document.getElementById('selectedStaffMember').value = name;
 }
 
@@ -2040,10 +2010,6 @@ function closeNewEntryForm() {
     if (submitBtn) submitBtn.textContent = 'Submit Data';
     document.getElementById('selectedStaffMember').value = '';
     document.getElementById('selectedHelper').value = '';
-    const operatorSelect = document.getElementById('formOperator');
-    const helperSelect = document.getElementById('formHelper');
-    if (operatorSelect) operatorSelect.value = '';
-    if (helperSelect) helperSelect.value = '';
     closeDatePicker();
     // Reset wizard to step 0
     currentWizardStep = 0;
@@ -2928,15 +2894,14 @@ function applyEditDataToCurrentStep() {
 
 async function submitLoadingData() {
     try {
-        const operatorName = document.getElementById('formOperator')?.value || document.getElementById('selectedStaffMember')?.value;
-        const helperName = document.getElementById('formHelper')?.value || document.getElementById('selectedHelper')?.value;
+        const operatorName = document.getElementById('selectedStaffMember')?.value || '';
+        const helperName = document.getElementById('selectedHelper')?.value || '';
         const staffName = helperName ? `${operatorName} (Op) / ${helperName} (Helper)` : operatorName;
         const date = document.getElementById('formDate').value;
         const pssStation = pendingEditData?.pssStation || document.getElementById('formPSSStation').value || getActivePSSStation();
         
         if (!operatorName) {
-            alert('❌ Please select an operator');
-            document.getElementById('formOperator')?.focus();
+            alert('❌ Please select a staff member');
             return;
         }
         

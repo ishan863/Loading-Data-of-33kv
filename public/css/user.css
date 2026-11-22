@@ -2621,43 +2621,6 @@
     margin-top: 0.5rem;
 }
 
-/* ===== OPERATOR / HELPER DROPDOWNS ===== */
-.staff-select-group {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-}
-
-.staff-select-group .form-select {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.15);
-    color: #fff;
-    padding: 0.75rem 1rem;
-    border-radius: 10px;
-    font-size: 14px;
-    cursor: pointer;
-}
-
-.staff-select-group .form-select:focus {
-    outline: none;
-    border-color: #8b5cf6;
-}
-
-.staff-select-group .form-select option {
-    background: rgba(15,23,35,0.95);
-    color: #e2e8f0;
-    padding: 0.75rem 1rem;
-}
-
-.staff-select-group label {
-    font-size: 12px;
-    font-weight: 700;
-    color: rgba(255,255,255,0.7);
-    margin-bottom: 0.4rem;
-    display: block;
-    letter-spacing: 0.02em;
-}
-
 /* Keep submit button visible on wizard last step */
 #newEntryModal .wizard-step .btn-primary {
     display: inline-block !important;
