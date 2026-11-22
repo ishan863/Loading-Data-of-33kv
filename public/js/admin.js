@@ -6015,11 +6015,43 @@ async function exportViewAllToExcel() {
             // Add feeder data (7 feeders × 10 columns = 70 columns)
             for (let i = 1; i <= 7; i++) {
                 const feederKey = `Feeder-${i}`;
-                const feeder = entry.feeders?.[feederKey];
+                let feeder = entry.feeders?.[feederKey];
+                
+                // If not found, try alternative key formats (same as HTML table rendering)
+                if (!feeder && entry.feeders) {
+                    const altKeys = [
+                        `Feeder ${i}`,  // "Feeder 1"
+                        `feeder-${i}`,  // "feeder-1"
+                        `feeder_${i}`,  // "feeder_1"
+                        Object.keys(entry.feeders)[i-1]  // Use array index
+                    ];
+                    
+                    for (const key of altKeys) {
+                        if (entry.feeders[key]) {
+                            feeder = entry.feeders[key];
+                            break;
+                        }
+                    }
+                }
                 
                 if (feeder) {
+                    // Fix: Handle nested name object properly
+                    let feederName = `Feeder-${i}`;
+                    if (feeder.name) {
+                        if (typeof feeder.name === 'object' && feeder.name.name) {
+                            feederName = feeder.name.name;
+                        } else if (typeof feeder.name === 'string') {
+                            feederName = feeder.name;
+                        }
+                    } else if (feeder.feederName) {
+                        if (typeof feeder.feederName === 'object' && feeder.feederName.name) {
+                            feederName = feeder.feederName.name;
+                        } else if (typeof feeder.feederName === 'string') {
+                            feederName = feeder.feederName;
+                        }
+                    }
                     row.push(
-                        feeder.name || `Feeder-${i}`,  // Feeder Name
+                        feederName,  // Feeder Name
                         feeder.ptrNo || '',            // PTR no
                         feeder.maxVoltage || '',
                         feeder.maxVoltageTime || '',
