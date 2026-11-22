@@ -2114,6 +2114,20 @@
                         </div>
                     </div>
 
+                    <!-- Date Range Picker -->
+                    <div class="user-calendar-range">
+                        <div class="range-group">
+                            <label class="range-label">From</label>
+                            <input type="text" id="rangeFromDate" class="form-control" readonly placeholder="From date" onclick="openRangeDatePicker('from')">
+                        </div>
+                        <div class="range-group">
+                            <label class="range-label">To</label>
+                            <input type="text" id="rangeToDate" class="form-control" readonly placeholder="To date" onclick="openRangeDatePicker('to')">
+                        </div>
+                        <button type="button" class="btn-primary" onclick="applyUserCalendarRange()">Apply Range</button>
+                        <button type="button" class="btn-secondary" onclick="clearUserCalendarRange()">Clear</button>
+                    </div>
+
                     <div class="user-calendar-weekdays" aria-hidden="true">
                         <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
                     </div>
@@ -2174,28 +2188,46 @@
 
                     <div class="form-group">
                         <label>Date *</label>
-                        <input type="date" id="formDate" class="form-control" required>
-                    </div>
-
-                    <div class="form-group">
-                        <label>Select Staff Member *</label>
-                        <div class="staff-cards-container">
-                            <div class="staff-column">
-                                <h4>👷 Linemen</h4>
-                                <div id="linemenCards" class="staff-cards">
-                                    <!-- Linemen cards will be added here -->
+                        <div class="date-picker-wrapper" id="formDateWrapper">
+                            <input type="text" id="formDate" class="form-control" readonly required placeholder="Select date">
+                            <button type="button" id="formDateBtn" class="date-picker-btn" onclick="toggleDatePicker()" aria-label="Open calendar">📅</button>
+                        </div>
+                        <div class="date-picker-hint" id="formDateHint">Pick a date (green = data exists, orange = already submitted by another, today/future disabled)</div>
+                        <div id="datePickerOverlay" class="date-picker-overlay" role="dialog" aria-modal="true" aria-labelledby="datePickerTitle">
+                            <div class="date-picker-panel">
+                                <div class="date-picker-header">
+                                    <h3 id="datePickerTitle">Select Date</h3>
+                                    <div class="date-picker-nav">
+                                        <button type="button" class="date-nav-btn" onclick="datePickerPrevMonth()">‹</button>
+                                        <span class="date-picker-month" id="datePickerMonthLabel">November 2026</span>
+                                        <button type="button" class="date-nav-btn" onclick="datePickerNextMonth()">›</button>
+                                    </div>
                                 </div>
-                            </div>
-                            <div class="staff-column">
-                                <h4>🔧 Helpers</h4>
-                                <div id="helpersCards" class="staff-cards">
-                                    <!-- Helpers cards will be added here -->
+                                <div class="date-picker-weekdays">
+                                    <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+                                </div>
+                                <div class="date-picker-grid" id="datePickerGrid"></div>
+                                <div class="date-picker-actions">
+                                    <button type="button" class="btn-secondary" onclick="closeDatePicker()">Clear</button>
+                                    <button type="button" class="btn-secondary" onclick="datePickerGoToday()">Today</button>
                                 </div>
                             </div>
                         </div>
                     </div>
 
+                    <div class="form-group staff-select-group">
+                        <label>Operator *</label>
+                        <select id="formOperator" class="form-select" required>
+                            <option value="">Select operator</option>
+                        </select>
+                        <label>Helper</label>
+                        <select id="formHelper" class="form-select">
+                            <option value="">Select helper (optional)</option>
+                        </select>
+                    </div>
+
                     <input type="hidden" id="selectedStaffMember" value="">
+                    <input type="hidden" id="selectedHelper" value="">
                 </div>
 
                 <!-- Step 1: I/C Data -->

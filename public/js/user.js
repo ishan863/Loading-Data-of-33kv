@@ -13,6 +13,8 @@ const userState = {
     calendarMonth: todayLocalISO().slice(0, 7),
     calendarScope: 'mine',
     calendarSelectedDate: '',
+    calendarRangeFrom: '',
+    calendarRangeTo: '',
     // New filter state
     submissionFilters: {
         staff: 'all',
@@ -620,6 +622,13 @@ function getUserCalendarMonthLabel(monthKey) {
     return new Date(year, month - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 }
 
+function clearRangeInputs() {
+    const fromEl = document.getElementById('rangeFromDate');
+    const toEl = document.getElementById('rangeToDate');
+    if (fromEl) fromEl.value = '';
+    if (toEl) toEl.value = '';
+}
+
 function switchUserTab(tabName) {
     if (!tabName) return;
     document.querySelectorAll('.user-tab').forEach(tab => {
@@ -632,6 +641,9 @@ function switchUserTab(tabName) {
         panel.classList.toggle('active', panelName === tabName);
     });
     if (tabName === 'calendar') {
+        userState.calendarRangeFrom = '';
+        userState.calendarRangeTo = '';
+        clearRangeInputs();
         loadUserCalendarData().then(() => renderUserCalendar());
     }
 }
@@ -651,6 +663,9 @@ function refreshUserCalendar() {
 window.refreshUserCalendar = refreshUserCalendar;
 
 function shiftUserCalendarMonth(delta) {
+    userState.calendarRangeFrom = '';
+    userState.calendarRangeTo = '';
+    clearRangeInputs();
     const [year, month] = String(userState.calendarMonth || todayLocalISO().slice(0, 7)).split('-').map(Number);
     const next = new Date(year, month - 1 + Number(delta || 0), 1);
     userState.calendarMonth = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`;
@@ -661,6 +676,9 @@ window.shiftUserCalendarMonth = shiftUserCalendarMonth;
 
 function goToUserCalendarToday() {
     userState.calendarMonth = todayLocalISO().slice(0, 7);
+    userState.calendarRangeFrom = '';
+    userState.calendarRangeTo = '';
+    clearRangeInputs();
     userState.calendarSelectedDate = '';
     renderUserCalendar();
 }
@@ -668,6 +686,9 @@ window.goToUserCalendarToday = goToUserCalendarToday;
 
 function setUserCalendarScope(scope) {
     userState.calendarScope = scope === 'station' ? 'station' : 'mine';
+    userState.calendarRangeFrom = '';
+    userState.calendarRangeTo = '';
+    clearRangeInputs();
     userState.calendarSelectedDate = '';
     document.querySelectorAll('.calendar-scope-btn').forEach(btn => {
         btn.classList.toggle('active', btn.dataset.calendarScope === userState.calendarScope);
@@ -687,6 +708,17 @@ function renderUserCalendar() {
     if (label) label.textContent = getUserCalendarMonthLabel(monthKey);
 
     const byDate = getCalendarEntriesByDate();
+
+    // Apply range filter: only keep dates within [rangeFrom, rangeTo] and current month
+    const rangeFrom = userState.calendarRangeFrom || '';
+    const rangeTo = userState.calendarRangeTo || '';
+    const rangeByDate = new Map();
+    byDate.forEach((entries, iso) => {
+        if (!iso.startsWith(monthKey)) return;
+        if (rangeFrom && iso < rangeFrom) return;
+        if (rangeTo && iso > rangeTo) return;
+        rangeByDate.set(iso, entries);
+    });
     const today = todayLocalISO();
     const firstWeekday = new Date(year, month - 1, 1).getDay();
     const daysInMonth = new Date(year, month, 0).getDate();
@@ -697,18 +729,24 @@ function renderUserCalendar() {
     }
     for (let day = 1; day <= daysInMonth; day++) {
         const iso = `${monthKey}-${String(day).padStart(2, '0')}`;
-        const dayEntries = byDate.get(iso) || [];
+        const dayEntries = rangeByDate.get(iso) || [];
         const hasMine = dayEntries.some(isMyCalendarEntry);
+        const hasDuplicate = dayEntries.length && !hasMine;
         const classes = ['user-calendar-cell'];
         if (dayEntries.length) classes.push('has-data');
         if (hasMine) classes.push('is-mine');
+        else if (hasDuplicate) classes.push('is-duplicate');
         if (iso === today) classes.push('is-today');
         if (iso > today) classes.push('is-future');
         if (iso === userState.calendarSelectedDate) classes.push('is-selected');
         const badge = dayEntries.length
             ? `<span class="user-calendar-badge">${dayEntries.length}</span>`
             : '';
-        const dot = hasMine ? '<span class="user-calendar-dot" aria-hidden="true"></span>' : '';
+        const dot = hasMine
+            ? '<span class="user-calendar-dot is-mine-dot" aria-hidden="true"></span>'
+            : hasDuplicate
+                ? '<span class="user-calendar-dot is-dup-dot" aria-hidden="true"></span>'
+                : '';
         cells.push(`
             <button type="button" class="${classes.join(' ')}" data-date="${iso}" ${dayEntries.length ? '' : 'disabled'} aria-label="${formatDate(iso)}${dayEntries.length ? `, ${dayEntries.length} entries` : ', no entries'}">
                 <span class="user-calendar-daynum">${day}</span>
@@ -719,7 +757,7 @@ function renderUserCalendar() {
     }
     grid.innerHTML = cells.join('');
 
-    renderUserCalendarSummary(byDate, monthKey);
+    renderUserCalendarSummary(rangeByDate, monthKey);
     renderUserCalendarDetails(userState.calendarSelectedDate);
 }
 window.renderUserCalendar = renderUserCalendar;
@@ -1583,25 +1621,37 @@ function openNewEntryForm(submission = null) {
     const modal = document.getElementById('newEntryModal');
     const formPSSStation = document.getElementById('formPSSStation');
     const formDate = document.getElementById('formDate');
-    const linemenCards = document.getElementById('linemenCards');
-    const helpersCards = document.getElementById('helpersCards');
+    const formOperator = document.getElementById('formOperator');
+    const formHelper = document.getElementById('formHelper');
     
     // Use the record's station when an admin edits another PSS.
     const pssStation = submission?.pssStation || getActivePSSStation() || Object.keys(appState.pssConfig || {})[0] || 'KUNDUKELA';
     formPSSStation.value = pssStation;
     const existingDate = submission?.date ? normalizeDateValue(submission.date) : '';
     const latestAllowedDate = yesterdayLocalISO();
-    formDate.min = '';
-    formDate.max = existingDate && existingDate > latestAllowedDate ? existingDate : latestAllowedDate;
     formDate.value = existingDate || latestAllowedDate;
     const submitBtn = document.getElementById('submitBtn');
     if (submitBtn) submitBtn.textContent = submission ? 'Update Data' : 'Submit Data';
     console.log('PSS Station:', pssStation);
     
     // Clear previous selections
-    linemenCards.innerHTML = '<p style="color: rgba(255,255,255,0.5); font-size: 14px;">Loading staff data...</p>';
-    helpersCards.innerHTML = '<p style="color: rgba(255,255,255,0.5); font-size: 14px;">Loading staff data...</p>';
     document.getElementById('selectedStaffMember').value = '';
+    document.getElementById('selectedHelper').value = '';
+    if (formOperator) formOperator.value = '';
+    if (formHelper) formHelper.value = '';
+    
+    // Populate operator/helper dropdowns
+    populateStaffDropdowns(pssStation, formOperator, formHelper);
+    
+    // Apply pending staff selection if editing
+    if (submission) {
+        if (formOperator) formOperator.value = submission.staffName || '';
+        document.getElementById('selectedStaffMember').value = submission.staffName || '';
+        if (submission.helper) {
+            if (formHelper) formHelper.value = submission.helper;
+            document.getElementById('selectedHelper').value = submission.helper;
+        }
+    }
     
     // Reset wizard to step 0
     currentWizardStep = 0;
@@ -1641,21 +1691,72 @@ function openNewEntryForm(submission = null) {
                 if (name && !appState.pssConfig[name]) appState.pssConfig[name] = data;
             });
             console.log('✅ PSS Config reloaded:', appState.pssConfig);
-            populateStaffCards(pssStation, linemenCards, helpersCards);
-    applyPendingStaffSelection();
+            populateStaffDropdowns(pssStation, formOperator, formHelper);
+            if (submission) {
+                if (formOperator) formOperator.value = submission.staffName || '';
+                document.getElementById('selectedStaffMember').value = submission.staffName || '';
+                if (submission.helper) {
+                    if (formHelper) formHelper.value = submission.helper;
+                    document.getElementById('selectedHelper').value = submission.helper;
+                }
+            }
         }).catch(error => {
             console.error('❌ Error reloading PSS config:', error);
-            linemenCards.innerHTML = '<p style="color: #ef4444;">Error loading staff. Please reload page.</p>';
-            helpersCards.innerHTML = '<p style="color: #ef4444;">Error loading staff. Please reload page.</p>';
         });
         return; // Exit and wait for data to load
     }
     
-    // Populate staff cards
-    populateStaffCards(pssStation, linemenCards, helpersCards);
-    applyPendingStaffSelection();
-    
     if (!formDate.value) formDate.value = yesterdayLocalISO();
+}
+
+function populateStaffDropdowns(pssStation, operatorSelect, helperSelect) {
+    // Get PSS data - check multiple possible locations
+    let pssData = appState.pssConfig[pssStation];
+    
+    // If not found, try finding by case-insensitive match
+    if (!pssData) {
+        const pssKey = Object.keys(appState.pssConfig).find(key => 
+            key.toLowerCase() === pssStation.toLowerCase()
+        );
+        if (pssKey) {
+            pssData = appState.pssConfig[pssKey];
+            console.log('Found PSS data with key:', pssKey);
+        }
+    }
+    
+    console.log('PSS Data for', pssStation, ':', pssData);
+    
+    // Build options helper
+    const buildOptions = (list, selectedValue = '') => {
+        let html = '<option value="">Select</option>';
+        (list || []).forEach(name => {
+            if (!name || !name.trim()) return;
+            const sel = String(name).trim() === selectedValue ? 'selected' : '';
+            html += `<option value="${escapeHtml(String(name).trim())}" ${sel}>${escapeHtml(String(name).trim())}</option>`;
+        });
+        return html;
+    };
+    
+    if (operatorSelect && pssData) {
+        const rawLinemen = pssData.lineman || pssData.linemen || [];
+        const linemenList = (Array.isArray(rawLinemen) ? rawLinemen : String(rawLinemen).split(/[\n,]+/)).map(n => String(n).trim()).filter(Boolean);
+        operatorSelect.innerHTML = buildOptions(linemenList, operatorSelect.value || '');
+        console.log('Linemen dropdown populated:', linemenList.length, 'items');
+    }
+    
+    if (helperSelect && pssData) {
+        const rawHelpers = pssData.helper || pssData.helpers || [];
+        const helpersList = (Array.isArray(rawHelpers) ? rawHelpers : String(rawHelpers).split(/[\n,]+/)).map(n => String(n).trim()).filter(Boolean);
+        helperSelect.innerHTML = '<option value="">Select helper (optional)</option>' + buildOptions(helpersList, helperSelect.value || '').replace(/^<option value="">Select<\/option>/, '');
+        console.log('Helpers dropdown populated:', helpersList.length, 'items');
+    }
+    
+    if (!operatorSelect || !pssData) {
+        if (operatorSelect) operatorSelect.innerHTML = '<option value="">No operators available</option>';
+    }
+    if (!helperSelect || !pssData) {
+        if (helperSelect) helperSelect.innerHTML = '<option value="">No helpers available</option>';
+    }
 }
 
 function populateStaffCards(pssStation, linemenCards, helpersCards) {
@@ -1744,37 +1845,19 @@ function populateStaffCards(pssStation, linemenCards, helpersCards) {
 function applyPendingStaffSelection() {
     if (!pendingEditData || !pendingEditData.staffName) return;
     const name = pendingEditData.staffName;
-    const cards = Array.from(document.querySelectorAll('#linemenCards .staff-card, #helpersCards .staff-card'));
-    const match = cards.find(card => (card.querySelector('.staff-card-name')?.textContent || '').trim() === name);
-    if (match) {
-        selectStaffMember(name, match);
-        return;
-    }
-    const container = document.getElementById('helpersCards') || document.getElementById('linemenCards');
-    if (!container) return;
-    const placeholder = container.querySelector('p');
-    if (placeholder) placeholder.remove();
-    const card = document.createElement('div');
-    card.className = 'staff-card selected';
-    const nameEl = document.createElement('span');
-    nameEl.className = 'staff-card-name';
-    nameEl.textContent = name;
-    card.appendChild(nameEl);
-    card.onclick = () => selectStaffMember(name, card);
-    container.appendChild(card);
+    const operatorSelect = document.getElementById('formOperator');
+    if (operatorSelect) operatorSelect.value = name;
     document.getElementById('selectedStaffMember').value = name;
+    if (pendingEditData.helper) {
+        const helperSelect = document.getElementById('formHelper');
+        if (helperSelect) helperSelect.value = pendingEditData.helper;
+        document.getElementById('selectedHelper').value = pendingEditData.helper;
+    }
 }
 
 function selectStaffMember(name, clickedCard) {
-    // Remove selected class from all cards
-    document.querySelectorAll('.staff-card').forEach(card => {
-        card.classList.remove('selected');
-    });
-    
-    // Add selected class to clicked card
-    clickedCard.classList.add('selected');
-    
-    // Store selected staff member
+    const operatorSelect = document.getElementById('formOperator');
+    if (operatorSelect) operatorSelect.value = name;
     document.getElementById('selectedStaffMember').value = name;
 }
 
@@ -1785,6 +1868,12 @@ function closeNewEntryForm() {
     const submitBtn = document.getElementById('submitBtn');
     if (submitBtn) submitBtn.textContent = 'Submit Data';
     document.getElementById('selectedStaffMember').value = '';
+    document.getElementById('selectedHelper').value = '';
+    const operatorSelect = document.getElementById('formOperator');
+    const helperSelect = document.getElementById('formHelper');
+    if (operatorSelect) operatorSelect.value = '';
+    if (helperSelect) helperSelect.value = '';
+    closeDatePicker();
     // Reset wizard to step 0
     currentWizardStep = 0;
     updateWizardButtons();
@@ -1795,11 +1884,260 @@ function closeNewEntryForm() {
         if (index === 0) step.classList.add('active');
     });
     
-    // Show only first step
-    document.querySelectorAll('.wizard-step').forEach((step, index) => {
-        step.classList.remove('active');
-        if (index === 0) step.classList.add('active');
+    closeDatePicker();
+}
+
+// ===== CUSTOM DATE PICKER =====
+let datePickerState = {
+    year: new Date().getFullYear(),
+    month: new Date().getMonth() + 1,
+    selected: ''
+};
+
+function toggleDatePicker() {
+    const overlay = document.getElementById('datePickerOverlay');
+    if (!overlay) return;
+    const isOpen = overlay.classList.contains('open');
+    if (isOpen) {
+        closeDatePicker();
+    } else {
+        openDatePicker();
+    }
+}
+
+function openDatePicker() {
+    const overlay = document.getElementById('datePickerOverlay');
+    const formDate = document.getElementById('formDate');
+    if (!overlay) return;
+    if (formDate && formDate.value) {
+        const [y, m] = formDate.value.split('-').map(Number);
+        if (y && m) {
+            datePickerState.year = y;
+            datePickerState.month = m;
+        }
+    }
+    datePickerState.selected = formDate ? formDate.value : '';
+    overlay.classList.add('open');
+    renderDatePicker();
+    
+    // Close when clicking outside
+    const handler = (e) => {
+        const panel = document.querySelector('.date-picker-panel');
+        const btn = document.getElementById('formDateBtn');
+        if (overlay.classList.contains('open') && !panel?.contains(e.target) && e.target !== btn) {
+            closeDatePicker();
+            document.removeEventListener('click', handler);
+        }
+    };
+    setTimeout(() => document.addEventListener('click', handler), 100);
+}
+
+function closeDatePicker() {
+    const overlay = document.getElementById('datePickerOverlay');
+    if (overlay) overlay.classList.remove('open');
+}
+
+// ===== CALENDAR DATE RANGE PICKER =====
+let rangePickerMode = null; // 'from' | 'to'
+
+function openRangeDatePicker(mode) {
+    rangePickerMode = mode;
+    const formDate = document.getElementById('formDate');
+    if (!formDate) return;
+    const [y, m] = formDate.value.split('-').map(Number);
+    if (y && m) {
+        datePickerState.year = y;
+        datePickerState.month = m;
+    }
+    datePickerState.selected = '';
+    const overlay = document.getElementById('datePickerOverlay');
+    overlay.classList.add('open');
+    renderDatePicker();
+    const handler = (e) => {
+        const panel = document.querySelector('.date-picker-panel');
+        const btn = document.getElementById('formDateBtn');
+        if (overlay.classList.contains('open') && !panel?.contains(e.target) && e.target !== btn) {
+            closeDatePicker();
+            document.removeEventListener('click', handler);
+        }
+    };
+    setTimeout(() => document.addEventListener('click', handler), 100);
+}
+
+function selectRangeDate(iso) {
+    if (!iso) return;
+    if (rangePickerMode === 'from') {
+        userState.calendarRangeFrom = iso;
+        document.getElementById('rangeFromDate').value = formatDate(iso);
+    } else if (rangePickerMode === 'to') {
+        userState.calendarRangeTo = iso;
+        document.getElementById('rangeToDate').value = formatDate(iso);
+    }
+    closeDatePicker();
+    rangePickerMode = null;
+    renderUserCalendar();
+}
+
+function applyUserCalendarRange() {
+    renderUserCalendar();
+}
+
+function clearUserCalendarRange() {
+    userState.calendarRangeFrom = '';
+    userState.calendarRangeTo = '';
+    document.getElementById('rangeFromDate').value = '';
+    document.getElementById('rangeToDate').value = '';
+    renderUserCalendar();
+}
+
+function datePickerPrevMonth() {
+    datePickerState.month -= 1;
+    if (datePickerState.month < 1) {
+        datePickerState.month = 12;
+        datePickerState.year -= 1;
+    }
+    renderDatePicker();
+}
+
+function datePickerNextMonth() {
+    datePickerState.month += 1;
+    if (datePickerState.month > 12) {
+        datePickerState.month = 1;
+        datePickerState.year += 1;
+    }
+    renderDatePicker();
+}
+
+function datePickerGoToday() {
+    const today = todayLocalISO();
+    const [y, m] = today.split('-').map(Number);
+    datePickerState.year = y;
+    datePickerState.month = m;
+    selectDatePickerDate(today);
+    closeDatePicker();
+}
+
+function renderDatePicker() {
+    const grid = document.getElementById('datePickerGrid');
+    const label = document.getElementById('datePickerMonthLabel');
+    const formDate = document.getElementById('formDate');
+    if (!grid || !label) return;
+    
+    const monthName = new Date(datePickerState.year, datePickerState.month - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    label.textContent = monthName;
+    
+    const today = todayLocalISO();
+    const latestAllowed = yesterdayLocalISO();
+    const firstWeekday = new Date(datePickerState.year, datePickerState.month - 1, 1).getDay();
+    const daysInMonth = new Date(datePickerState.year, datePickerState.month, 0).getDate();
+    
+    // Build status map for this month
+    const statusMap = new Map();
+    const monthKey = `${String(datePickerState.year).padStart(4, '0')}-${String(datePickerState.month).padStart(2, '0')}`;
+    const pssStation = document.getElementById('formPSSStation')?.value || getActivePSSStation() || '';
+    const station = String(pssStation || '').trim().toLowerCase();
+    
+    const entries = (userState.pssSubmissions || []).filter(entry => {
+        const iso = normalizeDateValue(entry.date);
+        if (!iso || !iso.startsWith(monthKey)) return false;
+        if (!station) return true;
+        return String(entry.pssStation || '').trim().toLowerCase() === station;
     });
+    
+    entries.forEach(entry => {
+        const iso = normalizeDateValue(entry.date);
+        if (!iso) return;
+        const existing = statusMap.get(iso) || { own: false, dup: false };
+        const myPhone = normalizePhone(appState.currentUser?.phoneNumber);
+        const entryPhone = normalizePhone(entry.phoneNumber || entry.phone);
+        const isOwn = (myPhone && entryPhone && myPhone === entryPhone) ||
+            (String(appState.currentUser?.name || '').trim().toLowerCase() === String(entry.staffName || '').trim().toLowerCase());
+        if (isOwn) existing.own = true;
+        else existing.dup = true;
+        statusMap.set(iso, existing);
+    });
+    
+    const cells = [];
+    for (let i = 0; i < firstWeekday; i++) {
+        cells.push('<div class="date-picker-day is-empty"></div>');
+    }
+    for (let day = 1; day <= daysInMonth; day++) {
+        const iso = `${monthKey}-${String(day).padStart(2, '0')}`;
+        const status = statusMap.get(iso);
+        const classes = ['date-picker-day'];
+        let disabled = false;
+        
+        if (iso > today) {
+            classes.push('is-disabled');
+            disabled = true;
+        } else if (iso === today) {
+            classes.push('is-today');
+        }
+        if (status) {
+            if (status.own) classes.push('is-own');
+            else if (status.dup) classes.push('is-duplicate');
+        }
+        if (iso === datePickerState.selected) classes.push('is-selected');
+        
+        cells.push(`<button type="button" class="${classes.join(' ')}" ${disabled ? 'disabled' : ''} onclick="${disabled ? '' : `selectDatePickerDate('${iso}')`}" aria-label="${formatDate(iso)}">${day}</button>`);
+    }
+    grid.innerHTML = cells.join('');
+}
+
+function selectDatePickerDate(iso) {
+    if (rangePickerMode) {
+        selectRangeDate(iso);
+        return;
+    }
+    const formDate = document.getElementById('formDate');
+    if (!formDate) return;
+    
+    const today = todayLocalISO();
+    if (!editingSubmissionId && iso >= today) {
+        showUserNotification(`Data can only be submitted for previous dates. Latest allowed: ${formatDate(yesterdayLocalISO())}`, 'error');
+        return;
+    }
+    
+    formDate.value = iso;
+    datePickerState.selected = iso;
+    closeDatePicker();
+    
+    // Check for duplicate and show hint
+    checkDateDuplicate(iso);
+}
+
+async function checkDateDuplicate(iso) {
+    const pssStation = document.getElementById('formPSSStation')?.value || getActivePSSStation() || '';
+    const station = String(pssStation || '').trim().toLowerCase();
+    if (!station || !iso) return;
+    
+    try {
+        const snapshot = await db.collection('daily_entries').where('date', '==', iso).get();
+        const matches = snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(entry => String(entry.pssStation || '').trim().toLowerCase() === station);
+        if (matches.length) {
+            const existing = matches.find(entry => {
+                const myPhone = normalizePhone(appState.currentUser?.phoneNumber);
+                const entryPhone = normalizePhone(entry.phoneNumber || entry.phone);
+                return (myPhone && entryPhone && myPhone === entryPhone) ||
+                    (String(appState.currentUser?.name || '').trim().toLowerCase() === String(entry.staffName || '').trim().toLowerCase());
+            }) || matches[0];
+            const hint = document.getElementById('formDateHint');
+            if (hint) {
+                hint.textContent = `⚠️ Already submitted for ${formatDate(iso)} at ${pssStation} by ${existing.submittedBy || existing.staffName || 'Unknown'}. Selecting will override.`;
+                hint.style.color = '#fbbf24';
+            }
+        } else {
+            const hint = document.getElementById('formDateHint');
+            if (hint) {
+                hint.textContent = 'Pick a date (green = data exists, orange = already submitted by another, today/future disabled)';
+                hint.style.color = '';
+            }
+        }
+    } catch (e) {
+        // ignore
+    }
 }
 
 // ============================================
@@ -2419,12 +2757,15 @@ function applyEditDataToCurrentStep() {
 
 async function submitLoadingData() {
     try {
-        const staffName = document.getElementById('selectedStaffMember').value;
+        const operatorName = document.getElementById('formOperator')?.value || document.getElementById('selectedStaffMember')?.value;
+        const helperName = document.getElementById('formHelper')?.value || document.getElementById('selectedHelper')?.value;
+        const staffName = helperName ? `${operatorName} (Op) / ${helperName} (Helper)` : operatorName;
         const date = document.getElementById('formDate').value;
         const pssStation = pendingEditData?.pssStation || document.getElementById('formPSSStation').value || getActivePSSStation();
         
-        if (!staffName) {
-            alert('❌ Please select a staff member');
+        if (!operatorName) {
+            alert('❌ Please select an operator');
+            document.getElementById('formOperator')?.focus();
             return;
         }
         
@@ -2455,9 +2796,13 @@ async function submitLoadingData() {
                     .map(doc => ({ id: doc.id, ...doc.data() }))
                     .filter(entry => String(entry.pssStation || '').trim().toLowerCase() === sameStation);
                 if (dayEntries.length) {
-                    const duplicate = dayEntries.find(entry =>
-                        String(entry.staffName || '').toLowerCase() === staffName.toLowerCase()
-                    ) || dayEntries[0];
+                    const operatorLower = String(operatorName || '').toLowerCase().trim();
+                    const duplicate = dayEntries.find(entry => {
+                        const existingStaff = String(entry.staffName || '').toLowerCase();
+                        return existingStaff === operatorLower ||
+                            existingStaff.startsWith(operatorLower + ' (op)') ||
+                            existingStaff.startsWith(operatorLower + ' (operator)');
+                    }) || dayEntries[0];
                     const who = duplicate.submittedBy || duplicate.staffName || 'another user';
                     const updateExisting = confirm(
                         `A record already exists for ${pssStation} on ${formatDate(isoDate)}.\n` +
@@ -2621,6 +2966,8 @@ async function submitLoadingData() {
             pssStation: pssStation,
             phoneNumber: normalizePhone(originalEntry?.phoneNumber || appState.currentUser.phoneNumber),
             staffName: staffName,
+            operator: operatorName,
+            helper: helperName || '',
             date: isoDate,
             timestamp: originalEntry?.timestamp || firebase.firestore.FieldValue.serverTimestamp(),
             
