@@ -1685,18 +1685,28 @@ function closeClockPicker() {
 
 // Initialize time pickers in modal form
 function initializeTimePickersInModal() {
-    const timeInputs = document.querySelectorAll('.time-picker-input');
+    const timeInputs = document.querySelectorAll('.time-picker-input, .clock-time-input');
     console.log(`Initializing ${timeInputs.length} time pickers in modal`);
     
     timeInputs.forEach(input => {
         // Remove existing listeners
         input.removeEventListener('click', showClockPicker);
+        input.removeEventListener('keydown', handleTimeInputKeydown);
         
-        // Add click listener
+        // Add click listener (opens clock picker)
         input.addEventListener('click', showClockPicker);
+        
+        // Add keydown listener to allow clearing with Backspace/Delete
+        input.addEventListener('keydown', handleTimeInputKeydown);
         
         console.log(`Time picker initialized for: ${input.id}`);
     });
+}
+
+function handleTimeInputKeydown(e) {
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+        e.target.value = '';
+    }
 }
 
 // Export functions
@@ -2466,7 +2476,7 @@ function createEquipmentSection(title, idPrefix, icon = '⚡') {
                 </div>
                 <div class="form-group">
                     <label style="color: #ef4444; font-weight: 600; font-size: 12px;">⏰ MAX VOLTAGE TIME</label>
-                    <input type="text" id="${idPrefix}_max_voltage_time" class="form-control clock-time-input" placeholder="HH:MM" readonly style="border-left: 4px solid #ef4444;">
+                    <input type="text" id="${idPrefix}_max_voltage_time" class="form-control clock-time-input" placeholder="HH:MM" style="border-left: 4px solid #ef4444;">
                 </div>
                 <div class="form-group">
                     <label style="color: #3b82f6; font-weight: 600; font-size: 12px;">🔵 MIN VOLTAGE (KV)</label>
@@ -2474,7 +2484,7 @@ function createEquipmentSection(title, idPrefix, icon = '⚡') {
                 </div>
                 <div class="form-group">
                     <label style="color: #3b82f6; font-weight: 600; font-size: 12px;">⏰ MIN VOLTAGE TIME</label>
-                    <input type="text" id="${idPrefix}_min_voltage_time" class="form-control clock-time-input" placeholder="HH:MM" readonly style="border-left: 4px solid #3b82f6;">
+                    <input type="text" id="${idPrefix}_min_voltage_time" class="form-control clock-time-input" placeholder="HH:MM" style="border-left: 4px solid #3b82f6;">
                 </div>
                 <div class="form-group">
                     <label style="color: #f59e0b; font-weight: 600; font-size: 12px;">🟠 MAX LOAD (AMP)</label>
@@ -2482,7 +2492,7 @@ function createEquipmentSection(title, idPrefix, icon = '⚡') {
                 </div>
                 <div class="form-group">
                     <label style="color: #f59e0b; font-weight: 600; font-size: 12px;">⏰ MAX LOAD TIME</label>
-                    <input type="text" id="${idPrefix}_max_load_time" class="form-control clock-time-input" placeholder="HH:MM" readonly style="border-left: 4px solid #f59e0b;">
+                    <input type="text" id="${idPrefix}_max_load_time" class="form-control clock-time-input" placeholder="HH:MM" style="border-left: 4px solid #f59e0b;">
                 </div>
                 <div class="form-group">
                     <label style="color: #06b6d4; font-weight: 600; font-size: 12px;">🔷 MIN LOAD (AMP)</label>
@@ -2490,7 +2500,7 @@ function createEquipmentSection(title, idPrefix, icon = '⚡') {
                 </div>
                 <div class="form-group">
                     <label style="color: #06b6d4; font-weight: 600; font-size: 12px;">⏰ MIN LOAD TIME</label>
-                    <input type="text" id="${idPrefix}_min_load_time" class="form-control clock-time-input" placeholder="HH:MM" readonly style="border-left: 4px solid #06b6d4;">
+                    <input type="text" id="${idPrefix}_min_load_time" class="form-control clock-time-input" placeholder="HH:MM" style="border-left: 4px solid #06b6d4;">
                 </div>
             </div>
         </div>
@@ -2646,7 +2656,7 @@ function generateFeederSection() {
                 </div>
                 <div class="form-group">
                     <label style="color: #ef4444; font-weight: 600; font-size: 12px;">⏰ MAX VOLTAGE TIME</label>
-                    <input type="text" id="feeder_${index}_max_voltage_time" class="form-control time-picker-input" placeholder="--:--" readonly style="border-left: 4px solid #ef4444;">
+                    <input type="text" id="feeder_${index}_max_voltage_time" class="form-control time-picker-input" placeholder="--:--" style="border-left: 4px solid #ef4444;">
                 </div>
                 <div class="form-group">
                     <label style="color: #3b82f6; font-weight: 600; font-size: 12px;">🔵 MIN VOLTAGE (KV)</label>
@@ -2654,7 +2664,7 @@ function generateFeederSection() {
                 </div>
                 <div class="form-group">
                     <label style="color: #3b82f6; font-weight: 600; font-size: 12px;">⏰ MIN VOLTAGE TIME</label>
-                    <input type="text" id="feeder_${index}_min_voltage_time" class="form-control time-picker-input" placeholder="--:--" readonly style="border-left: 4px solid #3b82f6;">
+                    <input type="text" id="feeder_${index}_min_voltage_time" class="form-control time-picker-input" placeholder="--:--" style="border-left: 4px solid #3b82f6;">
                 </div>
                 <div class="form-group">
                     <label style="color: #f59e0b; font-weight: 600; font-size: 12px;">🟠 MAX LOAD (AMP)</label>
@@ -2662,7 +2672,7 @@ function generateFeederSection() {
                 </div>
                 <div class="form-group">
                     <label style="color: #f59e0b; font-weight: 600; font-size: 12px;">⏰ MAX LOAD TIME</label>
-                    <input type="text" id="feeder_${index}_max_load_time" class="form-control time-picker-input" placeholder="--:--" readonly style="border-left: 4px solid #f59e0b;">
+                    <input type="text" id="feeder_${index}_max_load_time" class="form-control time-picker-input" placeholder="--:--" style="border-left: 4px solid #f59e0b;">
                 </div>
                 <div class="form-group">
                     <label style="color: #06b6d4; font-weight: 600; font-size: 12px;">🔷 MIN LOAD (AMP)</label>
@@ -2670,7 +2680,7 @@ function generateFeederSection() {
                 </div>
                 <div class="form-group">
                     <label style="color: #06b6d4; font-weight: 600; font-size: 12px;">⏰ MIN LOAD TIME</label>
-                    <input type="text" id="feeder_${index}_min_load_time" class="form-control time-picker-input" placeholder="--:--" readonly style="border-left: 4px solid #06b6d4;">
+                    <input type="text" id="feeder_${index}_min_load_time" class="form-control time-picker-input" placeholder="--:--" style="border-left: 4px solid #06b6d4;">
                 </div>
             </div>
         </div>`;
@@ -2715,7 +2725,7 @@ function generateEquipmentSection() {
                     </div>
                     <div class="form-group">
                         <label style="color: #ef4444; font-weight: 600; font-size: 12px;">⏰ MAX VOLTAGE TIME</label>
-                        <input type="text" id="charger_max_voltage_time" class="form-control time-picker-input" placeholder="--:--" readonly style="border-left: 4px solid #ef4444;">
+                        <input type="text" id="charger_max_voltage_time" class="form-control time-picker-input" placeholder="--:--" style="border-left: 4px solid #ef4444;">
                     </div>
                     <div class="form-group">
                         <label style="color: #3b82f6; font-weight: 600; font-size: 12px;">🔵 MIN VOLTAGE (KV)</label>
@@ -2723,7 +2733,7 @@ function generateEquipmentSection() {
                     </div>
                     <div class="form-group">
                         <label style="color: #3b82f6; font-weight: 600; font-size: 12px;">⏰ MIN VOLTAGE TIME</label>
-                        <input type="text" id="charger_min_voltage_time" class="form-control time-picker-input" placeholder="--:--" readonly style="border-left: 4px solid #3b82f6;">
+                        <input type="text" id="charger_min_voltage_time" class="form-control time-picker-input" placeholder="--:--" style="border-left: 4px solid #3b82f6;">
                     </div>
                     <div class="form-group">
                         <label style="color: #f59e0b; font-weight: 600; font-size: 12px;">🟠 MAX LOAD (AMP)</label>
@@ -2731,7 +2741,7 @@ function generateEquipmentSection() {
                     </div>
                     <div class="form-group">
                         <label style="color: #f59e0b; font-weight: 600; font-size: 12px;">⏰ MAX LOAD TIME</label>
-                        <input type="text" id="charger_max_load_time" class="form-control time-picker-input" placeholder="--:--" readonly style="border-left: 4px solid #f59e0b;">
+                        <input type="text" id="charger_max_load_time" class="form-control time-picker-input" placeholder="--:--" style="border-left: 4px solid #f59e0b;">
                     </div>
                     <div class="form-group">
                         <label style="color: #06b6d4; font-weight: 600; font-size: 12px;">🔷 MIN LOAD (AMP)</label>
@@ -2739,7 +2749,7 @@ function generateEquipmentSection() {
                     </div>
                     <div class="form-group">
                         <label style="color: #06b6d4; font-weight: 600; font-size: 12px;">⏰ MIN LOAD TIME</label>
-                        <input type="text" id="charger_min_load_time" class="form-control time-picker-input" placeholder="--:--" readonly style="border-left: 4px solid #06b6d4;">
+                        <input type="text" id="charger_min_load_time" class="form-control time-picker-input" placeholder="--:--" style="border-left: 4px solid #06b6d4;">
                     </div>
                 </div>
             </div>
@@ -2765,7 +2775,7 @@ function createEquipmentSection(title, idPrefix, icon = '⚡') {
                 </div>
                 <div class="form-group">
                     <label style="color: #ef4444; font-weight: 600; font-size: 12px;">⏰ MAX VOLTAGE TIME</label>
-                    <input type="text" id="${idPrefix}_max_voltage_time" class="form-control time-picker-input" placeholder="--:--" readonly style="border-left: 4px solid #ef4444;" required>
+                    <input type="text" id="${idPrefix}_max_voltage_time" class="form-control time-picker-input" placeholder="--:--" style="border-left: 4px solid #ef4444;" required>
                 </div>
                 <div class="form-group">
                     <label style="color: #3b82f6; font-weight: 600; font-size: 12px;">🔵 MIN VOLTAGE (KV)</label>
@@ -2773,7 +2783,7 @@ function createEquipmentSection(title, idPrefix, icon = '⚡') {
                 </div>
                 <div class="form-group">
                     <label style="color: #3b82f6; font-weight: 600; font-size: 12px;">⏰ MIN VOLTAGE TIME</label>
-                    <input type="text" id="${idPrefix}_min_voltage_time" class="form-control time-picker-input" placeholder="--:--" readonly style="border-left: 4px solid #3b82f6;" required>
+                    <input type="text" id="${idPrefix}_min_voltage_time" class="form-control time-picker-input" placeholder="--:--" style="border-left: 4px solid #3b82f6;" required>
                 </div>
                 <div class="form-group">
                     <label style="color: #f59e0b; font-weight: 600; font-size: 12px;">🟠 MAX LOAD (AMP)</label>
@@ -2781,7 +2791,7 @@ function createEquipmentSection(title, idPrefix, icon = '⚡') {
                 </div>
                 <div class="form-group">
                     <label style="color: #f59e0b; font-weight: 600; font-size: 12px;">⏰ MAX LOAD TIME</label>
-                    <input type="text" id="${idPrefix}_max_load_time" class="form-control time-picker-input" placeholder="--:--" readonly style="border-left: 4px solid #f59e0b;" required>
+                    <input type="text" id="${idPrefix}_max_load_time" class="form-control time-picker-input" placeholder="--:--" style="border-left: 4px solid #f59e0b;" required>
                 </div>
                 <div class="form-group">
                     <label style="color: #06b6d4; font-weight: 600; font-size: 12px;">🔷 MIN LOAD (AMP)</label>
@@ -2789,7 +2799,7 @@ function createEquipmentSection(title, idPrefix, icon = '⚡') {
                 </div>
                 <div class="form-group">
                     <label style="color: #06b6d4; font-weight: 600; font-size: 12px;">⏰ MIN LOAD TIME</label>
-                    <input type="text" id="${idPrefix}_min_load_time" class="form-control time-picker-input" placeholder="--:--" readonly style="border-left: 4px solid #06b6d4;" required>
+                    <input type="text" id="${idPrefix}_min_load_time" class="form-control time-picker-input" placeholder="--:--" style="border-left: 4px solid #06b6d4;" required>
                 </div>
             </div>
         </div>
