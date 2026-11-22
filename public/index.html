@@ -2054,11 +2054,11 @@
                     </div>
                     <div style="flex: 1; min-width: 150px;">
                         <label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">📅 From Date</label>
-                        <input type="date" id="submissionFromDate" class="form-control" onchange="applySubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px;">
+                        <input type="date" id="submissionFromDate" class="form-control" onchange="applySubmissionFilters()" oninput="applySubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px; cursor: pointer;">
                     </div>
                     <div style="flex: 1; min-width: 150px;">
                         <label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">📅 To Date</label>
-                        <input type="date" id="submissionToDate" class="form-control" onchange="applySubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px;">
+                        <input type="date" id="submissionToDate" class="form-control" onchange="applySubmissionFilters()" oninput="applySubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px; cursor: pointer;">
                     </div>
                     <div style="display: flex; gap: 0.5rem;"><button class="btn-secondary" onclick="clearSubmissionFilters()" style="padding: 0.6rem 1rem; font-size: 13px; border-radius: 8px;">🔄 Clear</button></div>
                 </div>
@@ -2095,8 +2095,8 @@
                 <div class="recent-submissions-header"><h2>📋 Recent Submissions <span id="recentSubmissionBadge">0 / 0</span></h2><div id="recentTopPerformer" class="recent-top-performer"></div></div>
                 <div class="submission-filters" style="display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: flex-end;">
                     <div style="flex: 1; min-width: 160px;"><label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">👤 Staff</label><select id="recentStaffFilter" class="form-control" onchange="applyRecentSubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px;"><option value="all">All Staff</option></select></div>
-                    <div style="flex: 1; min-width: 160px;"><label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">📅 From Date</label><input type="date" id="recentFromDate" class="form-control" onchange="applyRecentSubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px;"></div>
-                    <div style="flex: 1; min-width: 160px;"><label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">📅 To Date</label><input type="date" id="recentToDate" class="form-control" onchange="applyRecentSubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px;"></div>
+                    <div style="flex: 1; min-width: 160px;"><label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">📅 From Date</label><input type="date" id="recentFromDate" class="form-control" onchange="applyRecentSubmissionFilters()" oninput="applyRecentSubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px; cursor: pointer;"></div>
+                    <div style="flex: 1; min-width: 160px;"><label style="display: block; margin-bottom: 0.5rem; color: rgba(255,255,255,0.8); font-size: 13px;">📅 To Date</label><input type="date" id="recentToDate" class="form-control" onchange="applyRecentSubmissionFilters()" oninput="applyRecentSubmissionFilters()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.6rem; border-radius: 8px; cursor: pointer;"></div>
                     <div style="display: flex; gap: 0.5rem; align-items: flex-end;"><button type="button" class="btn-secondary" onclick="clearRecentSubmissionFilters()" style="padding: 0.6rem 1rem; font-size: 13px; border-radius: 8px;">🔄 Clear</button></div>
                 </div>
                 <div id="recentSubmissionsTableContainer"></div>
