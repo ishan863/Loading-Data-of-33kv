@@ -3138,8 +3138,16 @@
     }
     .submission-filters .form-control,
     .submission-filters input[type="date"] {
+        position: relative;
+        z-index: 10;
+        pointer-events: auto;
         padding: 0.55rem 0.7rem;
         font-size: 13px;
+    }
+    #recentStaffFilter {
+        position: relative;
+        z-index: 10;
+        pointer-events: auto;
     }
     .stats-grid {
         grid-template-columns: repeat(2, 1fr);
@@ -3507,8 +3515,16 @@
     }
     .submission-filters .form-control,
     .submission-filters input[type="date"] {
+        position: relative;
+        z-index: 10;
+        pointer-events: auto;
         padding: 0.5rem 0.6rem;
         font-size: 12px;
+    }
+    #recentStaffFilter {
+        position: relative;
+        z-index: 10;
+        pointer-events: auto;
     }
     .btn-secondary {
         padding: 0.5rem 0.75rem;
@@ -3602,6 +3618,25 @@
     .recent-submissions-pagination .btn-secondary {
         padding: 0.35rem 0.45rem;
         font-size: 10.5px;
+    }
+    .submission-filters {
+        gap: 0.6rem;
+    }
+    .submission-filters label {
+        font-size: 10px;
+    }
+    .submission-filters .form-control,
+    .submission-filters input[type="date"] {
+        position: relative;
+        z-index: 10;
+        pointer-events: auto;
+        padding: 0.5rem 0.6rem;
+        font-size: 11px;
+    }
+    #recentStaffFilter {
+        position: relative;
+        z-index: 10;
+        pointer-events: auto;
     }
 }
 
